@@ -32,13 +32,17 @@ class ValidationService:
             )
             return warnings
 
+        applicable = self.ontology.tbox._class_and_ancestors(data.type)
         for prop in self.ontology.list_properties():
             if prop.required and prop.id not in data.properties:
-                if not prop.domain or data.type in prop.domain:
+                if not prop.domain or any(d in applicable for d in prop.domain):
                     warnings.append(
                         ValidationWarning(
-                            code="REQUIRED_PROPERTY_MISSING",
-                            message=f"必須プロパティ '{prop.id}' が欠落しています。",
+                            code="EDITOR_REQUIRED_MISSING",
+                            message=(
+                                f"エディタ必須プロパティ '{prop.id}' が欠落しています"
+                                "（Open World: 未入力は不明であり、偽ではありません）。"
+                            ),
                             field=f"properties.{prop.id}",
                         )
                     )

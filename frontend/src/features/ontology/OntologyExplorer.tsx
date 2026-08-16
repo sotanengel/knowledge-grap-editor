@@ -1,36 +1,36 @@
 import { useEffect, useState } from "react";
-import { api, OntologyClass, PropertyDef, Relationship } from "../../api/client";
+import { api, OwlClassV2, OwlPropertyV2 } from "../../api/client";
 import ClassDetail from "./ClassDetail";
 
 export default function OntologyExplorer() {
-  const [classes, setClasses] = useState<OntologyClass[]>([]);
-  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [classes, setClasses] = useState<OwlClassV2[]>([]);
+  const [properties, setProperties] = useState<OwlPropertyV2[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [properties, setProperties] = useState<PropertyDef[]>([]);
+  const [consistency, setConsistency] = useState<boolean | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([api.listClasses(), api.listRelationships()])
-      .then(([c, r]) => {
-        setClasses(c);
-        setRelationships(r);
-        if (c.length > 0) setSelectedId(c[0].id);
+    Promise.all([api.getSchemaV2(), api.getConsistency()])
+      .then(([schema, report]) => {
+        setClasses(schema.classes);
+        setProperties(schema.properties);
+        setConsistency(report.consistent);
+        if (schema.classes.length > 0) setSelectedId(schema.classes[0].id);
         setError("");
       })
       .catch((e) => setError(e instanceof Error ? e.message : "取得に失敗しました"));
   }, []);
 
-  useEffect(() => {
-    if (!selectedId) return;
-    api
-      .getClassProperties(selectedId)
-      .then(setProperties)
-      .catch(() => setProperties([]));
-  }, [selectedId]);
-
   const selected = classes.find((c) => c.id === selectedId);
-  const classRelationships = relationships.filter(
-    (r) => r.domain.includes(selectedId) || r.range.includes(selectedId),
+  const classProperties = properties.filter(
+    (p) =>
+      p.property_type === "DatatypeProperty" &&
+      (!p.domain.length || p.domain.includes(selectedId)),
+  );
+  const classRelationships = properties.filter(
+    (p) =>
+      p.property_type === "ObjectProperty" &&
+      (p.domain.includes(selectedId) || p.range.includes(selectedId)),
   );
 
   if (error) {
@@ -44,7 +44,12 @@ export default function OntologyExplorer() {
   return (
     <div className="ontology-explorer" data-testid="ontology-explorer">
       <aside className="ontology-class-list">
-        <h3>Classes</h3>
+        <h3>Classes (OWL 2 DL)</h3>
+        {consistency !== null && (
+          <p className="ontology-consistency" data-testid="consistency-status">
+            {consistency ? "整合性: OK" : "整合性: 矛盾あり"}
+          </p>
+        )}
         <ul className="ontology-list">
           {classes.map((c) => (
             <li
@@ -61,7 +66,7 @@ export default function OntologyExplorer() {
       {selected && (
         <ClassDetail
           cls={selected}
-          properties={properties}
+          properties={classProperties}
           relationships={classRelationships}
         />
       )}

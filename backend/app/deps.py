@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from app.config import settings
+from app.ontology.migration.v1_to_v2 import run_migration_if_needed
 from app.services.export_service import ExportService
 from app.services.graph_service import GraphService
 from app.services.ontology_service import OntologyService
@@ -24,6 +25,7 @@ def get_store() -> OxigraphStore:
         _store = OxigraphStore(data_dir)
         seed = Path(__file__).resolve().parent / "ontology" / "seed.ttl"
         _store.load_seed_if_needed(seed)
+        run_migration_if_needed(_store)
     return _store
 
 

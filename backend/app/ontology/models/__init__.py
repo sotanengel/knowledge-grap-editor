@@ -1,0 +1,1 @@
+"""OWL domain model types."""

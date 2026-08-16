@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import edges, export, graph, nodes, ontology
+from app.api import edges, export, graph, nodes, ontology, ontology_v2
 from app.config import settings
 
 app = FastAPI(title="Knowledge Graph API", version="0.1.0")
@@ -17,6 +17,7 @@ app.add_middleware(
 app.include_router(nodes.router)
 app.include_router(edges.router)
 app.include_router(ontology.router)
+app.include_router(ontology_v2.router)
 app.include_router(graph.router)
 app.include_router(export.router)
 

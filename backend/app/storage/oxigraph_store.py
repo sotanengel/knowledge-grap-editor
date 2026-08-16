@@ -6,9 +6,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pyoxigraph import Literal, NamedNode, Quad, RdfFormat, Store, Variable
+from pyoxigraph import BlankNode, Literal, NamedNode, Quad, RdfFormat, Store, Variable
 
 from app.config import settings
+from app.ontology.models.triple import Triple
 from app.storage import rdf_constants as R
 
 
@@ -22,10 +23,16 @@ class OxigraphStore:
         self.store = Store(db_path)
         self.ontology_graph = NamedNode(settings.ontology_graph)
         self.data_graph = NamedNode(settings.data_graph)
+        self.inferred_graph = NamedNode(settings.inferred_graph)
         self._seed_loaded_marker = os.path.join(self.data_dir, ".seed_loaded")
 
-    def _named_node(self, uri: str) -> NamedNode:
+    def _named_node(self, uri: str) -> NamedNode | BlankNode:
+        if uri.startswith("_:"):
+            return BlankNode(uri[2:])
         return NamedNode(uri)
+
+    def _object_term(self, uri: str) -> NamedNode | BlankNode:
+        return self._named_node(uri)
 
     def load_seed_if_needed(self, seed_path: Path) -> None:
         if os.path.exists(self._seed_loaded_marker):
@@ -48,9 +55,23 @@ class OxigraphStore:
         graph: NamedNode,
     ) -> None:
         s = self._named_node(subject)
-        p = self._named_node(predicate)
-        o: NamedNode | Literal = obj if isinstance(obj, Literal) else self._named_node(obj)
+        p = NamedNode(predicate)
+        o: NamedNode | BlankNode | Literal = (
+            obj if isinstance(obj, Literal) else self._object_term(obj)
+        )
         self.store.add(Quad(s, p, o, graph))
+
+    def add_triple(self, triple: Triple, graph: NamedNode) -> None:
+        if triple.object_is_literal:
+            lit = self.literal(
+                triple.object,
+                triple.literal_datatype,
+            )
+            if triple.literal_language:
+                lit = Literal(triple.object, language=triple.literal_language)
+            self.add_quad(triple.subject, triple.predicate, lit, graph)
+        else:
+            self.add_quad(triple.subject, triple.predicate, triple.object, graph)
 
     def remove_entity_quads(self, entity_uri: str, graph: NamedNode) -> None:
         entity = self._named_node(entity_uri)
@@ -83,7 +104,14 @@ class OxigraphStore:
             results.append(row)
         return results
 
-    def literal(self, value: Any, datatype: str | None = None) -> Literal:
+    def literal(
+        self,
+        value: Any,
+        datatype: str | None = None,
+        language: str | None = None,
+    ) -> Literal:
+        if language:
+            return Literal(str(value), language=language)
         if datatype:
             return Literal(str(value), datatype=NamedNode(datatype))
         if isinstance(value, bool):
@@ -96,6 +124,11 @@ class OxigraphStore:
 
     def now_literal(self) -> Literal:
         return Literal(datetime.now(UTC).isoformat(), datatype=NamedNode(f"{R.XSD}dateTime"))
+
+    def clear_graph(self, graph: NamedNode) -> None:
+        to_remove = list(self.store.quads_for_pattern(None, None, None, graph))
+        for quad in to_remove:
+            self.store.remove(quad)
 
     def export_all(self, fmt: RdfFormat) -> bytes:
         return self.store.dump(format=fmt)

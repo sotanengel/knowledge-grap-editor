@@ -4,128 +4,99 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix kg: <urn:kg:> .
 
-# --- Annotation properties ---
-kg:alias a owl:AnnotationProperty ;
-    rdfs:label "alias"@en, "別名"@ja .
-
-kg:example a owl:AnnotationProperty ;
-    rdfs:label "example"@en, "例"@ja .
-
-kg:editorRequired a owl:AnnotationProperty ;
-    rdfs:label "editor required"@en, "エディタ必須"@ja ;
-    rdfs:comment "UI編集時の必須ヒント（OWL推論対象外）"@ja .
-
 # --- Classes ---
-kg:class:Entity a owl:Class ;
-    rdfs:label "Entity"@en, "エンティティ"@ja ;
-    rdfs:comment "すべてのエンティティの基底クラス"@ja .
-
-kg:class:Agent a owl:Class ;
+kg:class:Agent a rdfs:Class ;
     rdfs:label "Agent"@en, "主体"@ja ;
     rdfs:comment "能動的な主体を表す概念"@ja ;
-    rdfs:subClassOf kg:class:Entity ;
     kg:alias "主体", "エージェント" .
 
-kg:class:Person a owl:Class ;
+kg:class:Person a rdfs:Class ;
     rdfs:label "Person"@en, "人物"@ja ;
     rdfs:comment "人間を表す概念"@ja ;
     rdfs:subClassOf kg:class:Agent ;
     kg:alias "人物", "人" ;
     kg:example "山田太郎", "Steve Jobs" .
 
-kg:class:Organization a owl:Class ;
+kg:class:Organization a rdfs:Class ;
     rdfs:label "Organization"@en, "組織"@ja ;
     rdfs:comment "組織・企業・団体など、人々が所属する社会的主体"@ja ;
     rdfs:subClassOf kg:class:Agent ;
     kg:alias "組織", "会社", "企業", "団体", "法人" ;
     kg:example "Apple", "Google", "Microsoft" .
 
-kg:class:Product a owl:Class ;
+kg:class:Product a rdfs:Class ;
     rdfs:label "Product"@en, "製品"@ja ;
     rdfs:comment "製品・商品を表す概念"@ja ;
-    rdfs:subClassOf kg:class:Entity ;
     kg:alias "製品", "商品", "プロダクト", "スマホ" ;
     kg:example "iPhone 17", "MacBook" .
 
-kg:class:Place a owl:Class ;
+kg:class:Place a rdfs:Class ;
     rdfs:label "Place"@en, "場所"@ja ;
     rdfs:comment "地理的な場所を表す概念"@ja ;
-    rdfs:subClassOf kg:class:Entity ;
     kg:alias "場所", "地域", "ロケーション" ;
     kg:example "California", "東京" .
 
-kg:class:Event a owl:Class ;
+kg:class:Event a rdfs:Class ;
     rdfs:label "Event"@en, "イベント"@ja ;
     rdfs:comment "出来事を表す概念"@ja ;
-    rdfs:subClassOf kg:class:Entity ;
     kg:alias "出来事", "イベント" .
 
-kg:class:Document a owl:Class ;
+kg:class:Document a rdfs:Class ;
     rdfs:label "Document"@en, "文書"@ja ;
     rdfs:comment "文書・ドキュメントを表す概念"@ja ;
-    rdfs:subClassOf kg:class:Entity ;
     kg:alias "文書", "ドキュメント" .
 
-kg:class:Project a owl:Class ;
+kg:class:Project a rdfs:Class ;
     rdfs:label "Project"@en, "プロジェクト"@ja ;
     rdfs:comment "プロジェクトを表す概念"@ja ;
-    rdfs:subClassOf kg:class:Entity ;
     kg:alias "プロジェクト", "案件" .
 
-kg:class:Software a owl:Class ;
+kg:class:Software a rdfs:Class ;
     rdfs:label "Software"@en, "ソフトウェア"@ja ;
     rdfs:comment "ソフトウェアを表す概念"@ja ;
-    rdfs:subClassOf kg:class:Entity ;
     kg:alias "ソフトウェア", "アプリ", "アプリケーション" .
 
 # --- Datatype Properties ---
-kg:property:name a owl:DatatypeProperty, owl:FunctionalProperty ;
+kg:property:name a rdf:Property ;
     rdfs:label "name"@en, "名前"@ja ;
     rdfs:comment "名称"@ja ;
-    rdfs:domain kg:class:Entity ;
     rdfs:range xsd:string ;
     kg:alias "名称", "名前" .
 
-kg:property:description a owl:DatatypeProperty ;
+kg:property:description a rdf:Property ;
     rdfs:label "description"@en, "説明"@ja ;
     rdfs:comment "説明文"@ja ;
     rdfs:range xsd:string ;
     kg:alias "説明", "概要" .
 
-kg:property:birthDate a owl:DatatypeProperty ;
+kg:property:birthDate a rdf:Property ;
     rdfs:label "birthDate"@en, "生年月日"@ja ;
     rdfs:comment "生年月日"@ja ;
     rdfs:domain kg:class:Person ;
     rdfs:range xsd:date ;
-    kg:editorRequired "true"^^xsd:boolean .
+    kg:required "true"^^xsd:boolean .
 
-kg:property:email a owl:DatatypeProperty ;
+kg:property:email a rdf:Property ;
     rdfs:label "email"@en, "メール"@ja ;
     rdfs:domain kg:class:Person ;
     rdfs:range xsd:string .
 
-kg:property:price a owl:DatatypeProperty ;
+kg:property:price a rdf:Property ;
     rdfs:label "price"@en, "価格"@ja ;
     rdfs:domain kg:class:Product ;
     rdfs:range xsd:decimal ;
     kg:alias "値段", "価格" .
 
-kg:property:url a owl:DatatypeProperty ;
+kg:property:url a rdf:Property ;
     rdfs:label "url"@en, "URL"@ja ;
     rdfs:range xsd:anyURI .
 
-kg:property:brand a owl:DatatypeProperty ;
+kg:property:brand a rdf:Property ;
     rdfs:label "brand"@en, "ブランド"@ja ;
     rdfs:domain kg:class:Product ;
     rdfs:range xsd:string .
 
-# --- Object Properties ---
-kg:relationship:relatedTo a owl:ObjectProperty ;
-    rdfs:label "related to"@en, "関連"@ja ;
-    rdfs:comment "汎用的な関連関係"@ja ;
-    rdfs:domain kg:class:Entity ;
-    rdfs:range kg:class:Entity .
-
+# --- Object Properties (Relationships) ---
 kg:relationship:worksFor a owl:ObjectProperty ;
     rdfs:label "works for"@en, "所属"@ja ;
     rdfs:comment "人物が組織に所属・勤務していることを表す"@ja ;
