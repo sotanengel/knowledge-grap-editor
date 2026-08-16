@@ -98,7 +98,8 @@ export function validateNode(
     if (!propertyAppliesToClass(prop, data.type)) continue;
     const value = data.properties[prop.id] ?? "";
     if (prop.required && !value.trim()) {
-      fieldErrors[`properties.${prop.id}`] = `${prop.label || prop.id} は必須です`;
+      fieldErrors[`properties.${prop.id}`] =
+        `${prop.label || prop.id} はエディタ必須です（未入力は不明であり、偽ではありません）`;
       continue;
     }
     const formatError = validatePropertyValue(prop, value);

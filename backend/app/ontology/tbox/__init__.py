@@ -1,0 +1,1 @@
+"""TBox (ontology schema) service."""

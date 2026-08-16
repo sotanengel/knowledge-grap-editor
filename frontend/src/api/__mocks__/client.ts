@@ -6,6 +6,9 @@ export const api = {
   listEdges: vi.fn().mockResolvedValue([]),
   listClasses: vi.fn().mockResolvedValue([]),
   listRelationships: vi.fn().mockResolvedValue([]),
+  getSchemaV2: vi.fn().mockResolvedValue({ classes: [], properties: [] }),
+  getConsistency: vi.fn().mockResolvedValue({ consistent: true, inconsistencies: [] }),
+  listPropertiesV2: vi.fn().mockResolvedValue([]),
   searchGraph: vi.fn().mockResolvedValue({ nodes: [], edges: [] }),
   getNeighbors: vi.fn().mockResolvedValue({ nodes: [], edges: [], center: null, depth: 1 }),
   getClassProperties: vi.fn().mockResolvedValue([]),
@@ -38,6 +41,9 @@ export function resetApiMock() {
   api.listEdges.mockResolvedValue([]);
   api.listClasses.mockResolvedValue([]);
   api.listRelationships.mockResolvedValue([]);
+  api.getSchemaV2.mockResolvedValue({ classes: [], properties: [] });
+  api.getConsistency.mockResolvedValue({ consistent: true, inconsistencies: [] });
+  api.listPropertiesV2.mockResolvedValue([]);
   api.searchGraph.mockResolvedValue({ nodes: [], edges: [] });
   api.getNeighbors.mockResolvedValue({ nodes: [], edges: [], center: null, depth: 1 });
   api.getClassProperties.mockResolvedValue([]);

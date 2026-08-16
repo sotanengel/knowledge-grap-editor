@@ -62,7 +62,50 @@ export interface Relationship {
   description: string;
   domain: string[];
   range: string[];
+  inverse?: string | null;
   aliases: string[];
+}
+
+export interface OwlPropertyV2 {
+  iri: string;
+  id: string;
+  label: string;
+  description: string;
+  property_type: "ObjectProperty" | "DatatypeProperty" | "AnnotationProperty";
+  domain: string[];
+  range: string[];
+  sub_property_of: string[];
+  inverse_of: string | null;
+  characteristics: string[];
+  editor_required: boolean;
+  aliases: string[];
+}
+
+export interface OwlClassV2 {
+  iri: string;
+  id: string;
+  label: string;
+  labels?: string[];
+  description: string;
+  aliases: string[];
+  examples: string[];
+  subclass_of: Array<string | Record<string, unknown>>;
+  equivalent_class: Array<Record<string, unknown>>;
+  disjoint_with: Array<string | Record<string, unknown>>;
+}
+
+export interface SchemaV2Response {
+  classes: OwlClassV2[];
+  properties: OwlPropertyV2[];
+}
+
+export interface ConsistencyReport {
+  consistent: boolean;
+  inconsistencies: Array<{
+    code: string;
+    message: string;
+    involved_iris: string[];
+  }>;
 }
 
 export interface SuggestResult {
@@ -118,6 +161,9 @@ export const api = {
   deleteClass: (id: string) =>
     request<void>(`/api/ontology/classes/${id}`, { method: "DELETE" }),
   listRelationships: () => request<Relationship[]>("/api/ontology/relationships"),
+  getSchemaV2: () => request<SchemaV2Response>("/api/ontology/v2/schema"),
+  listPropertiesV2: () => request<OwlPropertyV2[]>("/api/ontology/v2/properties"),
+  getConsistency: () => request<ConsistencyReport>("/api/ontology/v2/consistency"),
   createRelationship: (data: Relationship) =>
     request<Relationship>("/api/ontology/relationships", {
       method: "POST",

@@ -22,10 +22,10 @@ def temp_store(monkeypatch):
 
 def test_seed_ontology_loaded(temp_store: OxigraphStore):
     results = temp_store.query("""
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
         SELECT (COUNT(?c) AS ?count) WHERE {
           GRAPH <urn:kg:ontology> {
-            ?c a rdfs:Class .
+            ?c a owl:Class .
           }
         }
     """)

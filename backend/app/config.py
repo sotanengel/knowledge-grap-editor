@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     validation_mode: str = "warn"  # warn | error
     ontology_graph: str = "urn:kg:ontology"
     data_graph: str = "urn:kg:data"
+    inferred_graph: str = "urn:kg:inferred"
     kg_namespace: str = "urn:kg:"
     cors_origins: list[str] = Field(
         default=[

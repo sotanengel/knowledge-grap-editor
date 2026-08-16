@@ -54,7 +54,7 @@ async def search_by_type(type: str) -> str:
 
 @mcp.tool(description="利用可能なオントロジーを取得する")
 async def get_schema() -> str:
-    data = await _backend_get("/api/ontology/schema")
+    data = await _backend_get("/api/ontology/v2/schema")
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
@@ -66,7 +66,7 @@ async def find_relationship(source: str, target: str) -> str:
 
 @mcp.resource("ontology://schema")
 async def schema_resource() -> str:
-    data = await _backend_get("/api/ontology/schema")
+    data = await _backend_get("/api/ontology/v2/schema")
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
@@ -76,9 +76,9 @@ async def classes_resource() -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
-@mcp.resource("ontology://relationships")
-async def relationships_resource() -> str:
-    data = await _backend_get("/api/ontology/relationships")
+@mcp.resource("ontology://properties")
+async def properties_resource() -> str:
+    data = await _backend_get("/api/ontology/v2/properties")
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 

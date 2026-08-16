@@ -14,6 +14,8 @@ from app.models.schemas import (
     NodeCreate,
     NodeUpdate,
 )
+from app.ontology.abox.service import ABoxService
+from app.ontology.inference.service import InferenceService
 from app.storage import rdf_constants as R
 from app.storage.oxigraph_store import OxigraphStore
 
@@ -22,6 +24,8 @@ class GraphService:
     def __init__(self, store: OxigraphStore) -> None:
         self.store = store
         self.graph = store.data_graph
+        self.abox = ABoxService(store)
+        self.inference = InferenceService(store)
 
     def _parse_metadata(self, rows: list[dict[str, str]], uri: str) -> Metadata:
         created = None
@@ -133,7 +137,8 @@ class GraphService:
         self.store.add_quad(uri, R.KG_CREATED_AT, now, self.graph)
         self.store.add_quad(uri, R.KG_UPDATED_AT, now, self.graph)
         for key, value in data.properties.items():
-            self.store.add_quad(uri, R.property_uri(key), self.store.literal(value), self.graph)
+            self.abox.add_datatype_assertion(data.id, key, value)
+        self.inference.apply_inferred()
         return self.get_node(data.id) or Node(id=data.id, label=data.label, type=data.type)
 
     def update_node(self, node_id: str, data: NodeUpdate) -> Node | None:
@@ -156,7 +161,8 @@ class GraphService:
         self.store.add_quad(uri, R.KG_CREATED_AT, created, self.graph)
         self.store.add_quad(uri, R.KG_UPDATED_AT, now, self.graph)
         for key, value in properties.items():
-            self.store.add_quad(uri, R.property_uri(key), self.store.literal(value), self.graph)
+            self.abox.add_datatype_assertion(node_id, key, value)
+        self.inference.apply_inferred()
         return self.get_node(node_id)
 
     def delete_node(self, node_id: str) -> bool:
@@ -229,6 +235,7 @@ class GraphService:
         self.store.add_quad(edge_uri, R.KG_UPDATED_AT, now, self.graph)
         # Also store as direct triple for graph traversal
         self.store.add_quad(subj_uri, pred_uri, obj_uri, self.graph)
+        self.inference.apply_inferred()
         return self.get_edge(data.id) or Edge(
             id=data.id,
             subject=data.subject,
