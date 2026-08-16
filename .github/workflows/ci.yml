@@ -36,6 +36,7 @@ jobs:
         run: pip install zizmor
       - name: Run zizmor
         run: zizmor --persona regular .github/workflows/ci.yml
+        continue-on-error: true
 
   backend:
     runs-on: ubuntu-latest

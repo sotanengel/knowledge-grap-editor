@@ -14,7 +14,7 @@ def temp_store(monkeypatch):
     monkeypatch.setenv("KG_DATA_DIR", tmpdir)
     reset_services()
     store = OxigraphStore(tmpdir)
-    seed = os.path.join(os.path.dirname(__file__), "..", "ontology", "seed.ttl")
+    seed = os.path.join(os.path.dirname(__file__), "..", "app", "ontology", "seed.ttl")
     store.load_seed_if_needed(__import__("pathlib").Path(seed))
     yield store
     reset_services()

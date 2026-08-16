@@ -7,7 +7,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 COPY pyproject.toml .
 COPY app ./app
-COPY ontology ./ontology
 
 RUN pip install --no-cache-dir ".[dev]"
 

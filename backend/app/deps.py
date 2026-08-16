@@ -22,7 +22,7 @@ def get_store() -> OxigraphStore:
     if _store is None:
         data_dir = os.environ.get("KG_DATA_DIR", settings.data_dir)
         _store = OxigraphStore(data_dir)
-        seed = Path(__file__).resolve().parent.parent / "ontology" / "seed.ttl"
+        seed = Path(__file__).resolve().parent / "ontology" / "seed.ttl"
         _store.load_seed_if_needed(seed)
     return _store
 
