@@ -3,23 +3,31 @@ import { render, screen } from "@testing-library/react";
 import GraphCanvas from "./GraphCanvas";
 
 vi.mock("cytoscape", () => {
-  const handlers: Record<string, Array<(evt: unknown) => void>> = {};
+  const makeCollection = () => ({
+    forEach: vi.fn(),
+    removeClass: vi.fn(),
+    unselect: vi.fn(),
+  });
   const mockCy = {
-    on: vi.fn((event: string, selector: string | ((evt: unknown) => void), handler?: (evt: unknown) => void) => {
-      const cb = typeof selector === "function" ? selector : handler!;
-      const key = typeof selector === "function" ? event : `${event}:${selector}`;
-      handlers[key] = handlers[key] ?? [];
-      handlers[key].push(cb);
-    }),
-    elements: vi.fn(() => ({ remove: vi.fn() })),
+    on: vi.fn(),
     add: vi.fn(),
     layout: vi.fn(() => ({ run: vi.fn() })),
-    getElementById: vi.fn(() => ({ nonempty: vi.fn(() => false), select: vi.fn(), addClass: vi.fn() })),
+    getElementById: vi.fn(() => ({
+      empty: vi.fn(() => true),
+      nonempty: vi.fn(() => false),
+      select: vi.fn(),
+      addClass: vi.fn(),
+      data: vi.fn(),
+      remove: vi.fn(),
+    })),
     $: vi.fn(() => ({ unselect: vi.fn() })),
-    nodes: vi.fn(() => ({ removeClass: vi.fn() })),
+    nodes: vi.fn(() => makeCollection()),
+    edges: vi.fn(() => makeCollection()),
+    animate: vi.fn(),
     fit: vi.fn(),
     zoom: vi.fn(() => 1),
     center: vi.fn(),
+    destroy: vi.fn(),
   };
   return { default: vi.fn(() => mockCy) };
 });
