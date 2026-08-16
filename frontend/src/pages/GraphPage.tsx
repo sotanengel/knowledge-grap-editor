@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, Edge, Node } from "../api/client";
 import GraphCanvas, { type GraphCanvasHandle } from "../features/graph/GraphCanvas";
 import { useGraphState } from "../features/graph/useGraphState";
-import Inspector from "../features/inspector/Inspector";
+import Inspector, { type InspectorMode } from "../features/inspector/Inspector";
 import LeftNavigator from "../features/navigator/LeftNavigator";
 import ThreeColumnLayout from "../layout/ThreeColumnLayout";
 import StatusBar from "../layout/StatusBar";
@@ -15,6 +15,7 @@ export default function GraphPage() {
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
   const [depth, setDepth] = useState(1);
   const [status, setStatus] = useState("");
+  const [inspectorMode, setInspectorMode] = useState<InspectorMode>("empty");
   const canvasRef = useRef<GraphCanvasHandle>(null);
   const {
     selectedNode,
@@ -56,6 +57,7 @@ export default function GraphPage() {
 
   const handleNodeSelect = useCallback(
     async (node: Node) => {
+      setInspectorMode("node");
       selectNode(node);
       try {
         const neighbors = await api.getNeighbors(node.id, depth);
@@ -68,8 +70,17 @@ export default function GraphPage() {
     [depth, selectNode],
   );
 
+  const handleEdgeSelect = useCallback(
+    (edge: Edge) => {
+      setInspectorMode("edge");
+      selectEdge(edge);
+    },
+    [selectEdge],
+  );
+
   const handleNodeExpand = useCallback(
     async (node: Node) => {
+      setInspectorMode("node");
       selectNode(node);
       try {
         const neighbors = await api.getNeighbors(node.id, depth);
@@ -81,6 +92,20 @@ export default function GraphPage() {
     },
     [depth, selectNode],
   );
+
+  const handleAddNode = () => {
+    clearSelection();
+    setInspectorMode("create-node");
+  };
+
+  const handleAddRelationship = () => {
+    setInspectorMode("create-edge");
+  };
+
+  const handleClearSelection = () => {
+    clearSelection();
+    setInspectorMode("empty");
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -93,6 +118,15 @@ export default function GraphPage() {
 
   const isEmpty = nodes.length === 0 && edges.length === 0 && !status;
 
+  const resolvedMode: InspectorMode =
+    inspectorMode === "create-node" || inspectorMode === "create-edge"
+      ? inspectorMode
+      : selectedNode
+        ? "node"
+        : selectedEdge
+          ? "edge"
+          : "empty";
+
   return (
     <>
       <ThreeColumnLayout
@@ -103,6 +137,8 @@ export default function GraphPage() {
             onSearch={handleSearch}
             depth={depth}
             onDepthChange={setDepth}
+            onAddNode={handleAddNode}
+            onAddRelationship={handleAddRelationship}
           />
         }
         center={
@@ -112,9 +148,9 @@ export default function GraphPage() {
               nodes={nodes}
               edges={edges}
               onNodeSelect={handleNodeSelect}
-              onEdgeSelect={selectEdge}
+              onEdgeSelect={handleEdgeSelect}
               onNodeExpand={handleNodeExpand}
-              onBackgroundClick={clearSelection}
+              onBackgroundClick={handleClearSelection}
               selectedNodeId={selectedNode?.id ?? null}
               selectedEdgeId={selectedEdge?.id ?? null}
             />
@@ -123,7 +159,9 @@ export default function GraphPage() {
                 <p>まだナレッジグラフがありません</p>
                 <p>Nodeを追加してグラフを構築してください。</p>
                 <div className="btn-row">
-                  <button type="button">Nodeを追加</button>
+                  <button type="button" onClick={handleAddNode}>
+                    Nodeを追加
+                  </button>
                   <Link to="/ontology" className="btn-link">
                     Ontologyを見る
                   </Link>
@@ -142,14 +180,16 @@ export default function GraphPage() {
         }
         right={
           <Inspector
+            mode={resolvedMode}
             selectedNode={selectedNode}
             selectedEdge={selectedEdge}
             nodes={nodes}
             edges={edges}
             onRefresh={() => loadGraph(searchQuery || undefined)}
-            onClearSelection={clearSelection}
+            onClearSelection={handleClearSelection}
             onSelectNode={handleNodeSelect}
-            onSelectEdge={selectEdge}
+            onSelectEdge={handleEdgeSelect}
+            onCancelCreate={() => setInspectorMode("empty")}
           />
         }
       />
