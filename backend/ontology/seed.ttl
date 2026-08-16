@@ -1,0 +1,130 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix kg: <urn:kg:> .
+
+# --- Classes ---
+kg:class:Agent a rdfs:Class ;
+    rdfs:label "Agent"@en, "主体"@ja ;
+    rdfs:comment "能動的な主体を表す概念"@ja ;
+    kg:alias "主体", "エージェント" .
+
+kg:class:Person a rdfs:Class ;
+    rdfs:label "Person"@en, "人物"@ja ;
+    rdfs:comment "人間を表す概念"@ja ;
+    rdfs:subClassOf kg:class:Agent ;
+    kg:alias "人物", "人" ;
+    kg:example "山田太郎", "Steve Jobs" .
+
+kg:class:Organization a rdfs:Class ;
+    rdfs:label "Organization"@en, "組織"@ja ;
+    rdfs:comment "組織・企業・団体など、人々が所属する社会的主体"@ja ;
+    rdfs:subClassOf kg:class:Agent ;
+    kg:alias "組織", "会社", "企業", "団体", "法人" ;
+    kg:example "Apple", "Google", "Microsoft" .
+
+kg:class:Product a rdfs:Class ;
+    rdfs:label "Product"@en, "製品"@ja ;
+    rdfs:comment "製品・商品を表す概念"@ja ;
+    kg:alias "製品", "商品", "プロダクト", "スマホ" ;
+    kg:example "iPhone 17", "MacBook" .
+
+kg:class:Place a rdfs:Class ;
+    rdfs:label "Place"@en, "場所"@ja ;
+    rdfs:comment "地理的な場所を表す概念"@ja ;
+    kg:alias "場所", "地域", "ロケーション" ;
+    kg:example "California", "東京" .
+
+kg:class:Event a rdfs:Class ;
+    rdfs:label "Event"@en, "イベント"@ja ;
+    rdfs:comment "出来事を表す概念"@ja ;
+    kg:alias "出来事", "イベント" .
+
+kg:class:Document a rdfs:Class ;
+    rdfs:label "Document"@en, "文書"@ja ;
+    rdfs:comment "文書・ドキュメントを表す概念"@ja ;
+    kg:alias "文書", "ドキュメント" .
+
+kg:class:Project a rdfs:Class ;
+    rdfs:label "Project"@en, "プロジェクト"@ja ;
+    rdfs:comment "プロジェクトを表す概念"@ja ;
+    kg:alias "プロジェクト", "案件" .
+
+kg:class:Software a rdfs:Class ;
+    rdfs:label "Software"@en, "ソフトウェア"@ja ;
+    rdfs:comment "ソフトウェアを表す概念"@ja ;
+    kg:alias "ソフトウェア", "アプリ", "アプリケーション" .
+
+# --- Datatype Properties ---
+kg:property:name a rdf:Property ;
+    rdfs:label "name"@en, "名前"@ja ;
+    rdfs:comment "名称"@ja ;
+    rdfs:range xsd:string ;
+    kg:alias "名称", "名前" .
+
+kg:property:description a rdf:Property ;
+    rdfs:label "description"@en, "説明"@ja ;
+    rdfs:comment "説明文"@ja ;
+    rdfs:range xsd:string ;
+    kg:alias "説明", "概要" .
+
+kg:property:birthDate a rdf:Property ;
+    rdfs:label "birthDate"@en, "生年月日"@ja ;
+    rdfs:comment "生年月日"@ja ;
+    rdfs:domain kg:class:Person ;
+    rdfs:range xsd:date ;
+    kg:required "true"^^xsd:boolean .
+
+kg:property:email a rdf:Property ;
+    rdfs:label "email"@en, "メール"@ja ;
+    rdfs:domain kg:class:Person ;
+    rdfs:range xsd:string .
+
+kg:property:price a rdf:Property ;
+    rdfs:label "price"@en, "価格"@ja ;
+    rdfs:domain kg:class:Product ;
+    rdfs:range xsd:decimal ;
+    kg:alias "値段", "価格" .
+
+kg:property:url a rdf:Property ;
+    rdfs:label "url"@en, "URL"@ja ;
+    rdfs:range xsd:anyURI .
+
+kg:property:brand a rdf:Property ;
+    rdfs:label "brand"@en, "ブランド"@ja ;
+    rdfs:domain kg:class:Product ;
+    rdfs:range xsd:string .
+
+# --- Object Properties (Relationships) ---
+kg:relationship:worksFor a owl:ObjectProperty ;
+    rdfs:label "works for"@en, "所属"@ja ;
+    rdfs:comment "人物が組織に所属・勤務していることを表す"@ja ;
+    rdfs:domain kg:class:Person ;
+    rdfs:range kg:class:Organization ;
+    kg:alias "勤務", "所属", "働く" .
+
+kg:relationship:produces a owl:ObjectProperty ;
+    rdfs:label "produces"@en, "製造"@ja ;
+    rdfs:comment "組織が製品を製造・提供することを表す"@ja ;
+    rdfs:domain kg:class:Organization ;
+    rdfs:range kg:class:Product ;
+    kg:alias "作る", "製造", "生産", "開発" .
+
+kg:relationship:locatedIn a owl:ObjectProperty ;
+    rdfs:label "located in"@en, "所在地"@ja ;
+    rdfs:comment "場所の関係を表す"@ja ;
+    rdfs:range kg:class:Place ;
+    kg:alias "所在", "位置", "場所" .
+
+kg:relationship:foundedBy a owl:ObjectProperty ;
+    rdfs:label "founded by"@en, "創業者"@ja ;
+    rdfs:domain kg:class:Organization ;
+    rdfs:range kg:class:Person ;
+    kg:alias "創設者", "設立者" .
+
+kg:relationship:manufacturedBy a owl:ObjectProperty ;
+    rdfs:label "manufactured by"@en, "製造元"@ja ;
+    rdfs:domain kg:class:Product ;
+    rdfs:range kg:class:Organization ;
+    kg:alias "メーカー", "製造元" .
