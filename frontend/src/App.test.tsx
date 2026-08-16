@@ -4,7 +4,7 @@ import App from "./App";
 import { renderWithRouter } from "./test/renderWithRouter";
 
 vi.mock("./features/graph/GraphCanvas", () => ({
-  default: () => <div data-testid="graph-canvas-mock">Graph</div>,
+  default: vi.fn(() => <div data-testid="graph-canvas-mock">Graph</div>),
 }));
 
 vi.mock("./api/client");

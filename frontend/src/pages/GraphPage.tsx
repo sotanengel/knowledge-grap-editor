@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, Edge, Node } from "../api/client";
-import GraphCanvas from "../features/graph/GraphCanvas";
+import GraphCanvas, { type GraphCanvasHandle } from "../features/graph/GraphCanvas";
+import { useGraphState } from "../features/graph/useGraphState";
 import Inspector from "../features/inspector/Inspector";
 import LeftNavigator from "../features/navigator/LeftNavigator";
 import ThreeColumnLayout from "../layout/ThreeColumnLayout";
@@ -14,6 +15,17 @@ export default function GraphPage() {
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
   const [depth, setDepth] = useState(1);
   const [status, setStatus] = useState("");
+  const canvasRef = useRef<GraphCanvasHandle>(null);
+  const {
+    selectedNode,
+    selectedEdge,
+    selectNode,
+    selectEdge,
+    clearSelection,
+    zoom,
+    setZoom,
+    selectionLabel,
+  } = useGraphState();
 
   const loadGraph = useCallback(async (query?: string) => {
     try {
@@ -28,7 +40,7 @@ export default function GraphPage() {
       }
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "読み込みに失敗しました");
+      setStatus(e instanceof Error ? e.message : "データを取得できませんでした");
     }
   }, []);
 
@@ -41,6 +53,43 @@ export default function GraphPage() {
   const handleSearch = () => {
     loadGraph(searchQuery || undefined);
   };
+
+  const handleNodeSelect = useCallback(
+    async (node: Node) => {
+      selectNode(node);
+      try {
+        const neighbors = await api.getNeighbors(node.id, depth);
+        setNodes(neighbors.nodes);
+        setEdges(neighbors.edges);
+      } catch {
+        /* keep current graph */
+      }
+    },
+    [depth, selectNode],
+  );
+
+  const handleNodeExpand = useCallback(
+    async (node: Node) => {
+      selectNode(node);
+      try {
+        const neighbors = await api.getNeighbors(node.id, depth);
+        setNodes(neighbors.nodes);
+        setEdges(neighbors.edges);
+      } catch {
+        /* keep current graph */
+      }
+    },
+    [depth, selectNode],
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (canvasRef.current) {
+        setZoom(canvasRef.current.getZoom());
+      }
+    }, 500);
+    return () => clearInterval(timer);
+  }, [setZoom]);
 
   const isEmpty = nodes.length === 0 && edges.length === 0 && !status;
 
@@ -58,7 +107,17 @@ export default function GraphPage() {
         }
         center={
           <div className="graph-area">
-            <GraphCanvas nodes={nodes} edges={edges} />
+            <GraphCanvas
+              ref={canvasRef}
+              nodes={nodes}
+              edges={edges}
+              onNodeSelect={handleNodeSelect}
+              onEdgeSelect={selectEdge}
+              onNodeExpand={handleNodeExpand}
+              onBackgroundClick={clearSelection}
+              selectedNodeId={selectedNode?.id ?? null}
+              selectedEdgeId={selectedEdge?.id ?? null}
+            />
             {isEmpty && (
               <div className="empty-state-overlay" data-testid="empty-state">
                 <p>まだナレッジグラフがありません</p>
@@ -83,7 +142,12 @@ export default function GraphPage() {
         }
         right={<Inspector />}
       />
-      <StatusBar nodeCount={nodes.length} edgeCount={edges.length} />
+      <StatusBar
+        nodeCount={nodes.length}
+        edgeCount={edges.length}
+        selection={selectionLabel}
+        zoom={zoom}
+      />
     </>
   );
 }
