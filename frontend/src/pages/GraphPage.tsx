@@ -108,6 +108,16 @@ export default function GraphPage() {
   }, []);
 
   const handleNodeSelect = useCallback(
+    (node: Node) => {
+      setInspectorMode("node");
+      setDrawerOpen(true);
+      selectNode(node);
+      canvasRef.current?.centerOnNode(node.id);
+    },
+    [selectNode],
+  );
+
+  const handleNodeExpand = useCallback(
     async (node: Node) => {
       setInspectorMode("node");
       setDrawerOpen(true);
@@ -133,47 +143,104 @@ export default function GraphPage() {
     [selectEdge],
   );
 
-  const handleNodeExpand = useCallback(
-    async (node: Node) => {
-      await handleNodeSelect(node);
-    },
-    [handleNodeSelect],
-  );
-
-  const handleAddNode = () => {
+  const handleAddNode = useCallback(() => {
     clearSelection();
     setInspectorMode("create-node");
     setDrawerOpen(true);
-  };
+  }, [clearSelection]);
 
-  const handleAddRelationship = () => {
+  const handleAddRelationship = useCallback(() => {
     setInspectorMode("create-edge");
     setDrawerOpen(true);
-  };
+  }, []);
 
-  const handleClearSelection = () => {
+  const handleClearSelection = useCallback(() => {
     clearSelection();
     setInspectorMode("empty");
     setDrawerOpen(false);
-  };
+  }, [clearSelection]);
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = useCallback(async () => {
     try {
       if (selectedNode) {
         push({ type: "node", action: "delete", before: selectedNode, after: null });
         await api.deleteNode(selectedNode.id);
-        handleClearSelection();
+        clearSelection();
+        setInspectorMode("empty");
+        setDrawerOpen(false);
         loadGraph(searchQuery || undefined);
       } else if (selectedEdge) {
         push({ type: "edge", action: "delete", before: selectedEdge, after: null });
         await api.deleteEdge(selectedEdge.id);
-        handleClearSelection();
+        clearSelection();
+        setInspectorMode("empty");
+        setDrawerOpen(false);
         loadGraph(searchQuery || undefined);
       }
     } catch {
       /* ignore */
     }
-  };
+  }, [selectedNode, selectedEdge, push, clearSelection, loadGraph, searchQuery]);
+
+  const handleContextMenu = useCallback(
+    (x: number, y: number, target: "node" | "edge" | "canvas", id?: string) => {
+      if (target === "node" && id) {
+        const node = allNodes.find((n) => n.id === id);
+        if (!node) return;
+        setContextMenu({
+          x,
+          y,
+          items: [
+            { label: "Nodeを編集", action: () => handleNodeSelect(node) },
+            {
+              label: "関係を追加",
+              action: () => {
+                selectNode(node);
+                setInspectorMode("create-edge");
+                setDrawerOpen(true);
+              },
+            },
+            { label: "周辺ノードを展開", action: () => void handleNodeExpand(node) },
+            {
+              label: "削除",
+              action: () => {
+                selectNode(node);
+                void handleDeleteSelected();
+              },
+              danger: true,
+            },
+          ],
+        });
+      } else if (target === "edge" && id) {
+        const edge = allEdges.find((e) => e.id === id);
+        if (!edge) return;
+        setContextMenu({
+          x,
+          y,
+          items: [
+            { label: "Relationshipを編集", action: () => handleEdgeSelect(edge) },
+            {
+              label: "削除",
+              action: () => {
+                selectEdge(edge);
+                void handleDeleteSelected();
+              },
+              danger: true,
+            },
+          ],
+        });
+      } else if (target === "canvas") {
+        setContextMenu({
+          x,
+          y,
+          items: [{ label: "Nodeを追加", action: handleAddNode }],
+        });
+      }
+    },
+    [allNodes, allEdges, handleNodeSelect, handleNodeExpand, handleEdgeSelect, selectNode, selectEdge, handleAddNode, handleDeleteSelected],
+  );
+
+  const handleZoomChange = useCallback((z: number) => setZoom(z), [setZoom]);
 
   useKeyboardShortcuts({
     onAddNode: handleAddNode,
@@ -185,17 +252,6 @@ export default function GraphPage() {
     },
     onSearch: () => searchInputRef.current?.focus(),
   });
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (canvasRef.current) setZoom(canvasRef.current.getZoom());
-    }, 500);
-    return () => clearInterval(timer);
-  }, [setZoom]);
-
-  useEffect(() => {
-    canvasRef.current?.setLayout(layout);
-  }, [layout, nodes, edges]);
 
   const isEmpty = allNodes.length === 0 && allEdges.length === 0 && !status;
 
@@ -276,48 +332,8 @@ export default function GraphPage() {
               onBackgroundClick={handleClearSelection}
               selectedNodeId={selectedNode?.id ?? null}
               selectedEdgeId={selectedEdge?.id ?? null}
-              onContextMenu={(x, y, target, id) => {
-                if (target === "node" && id) {
-                  const node = allNodes.find((n) => n.id === id);
-                  if (!node) return;
-                  setContextMenu({
-                    x,
-                    y,
-                    items: [
-                      { label: "Nodeを編集", action: () => handleNodeSelect(node) },
-                      { label: "関係を追加", action: () => {
-                        selectNode(node);
-                        handleAddRelationship();
-                      }},
-                      { label: "周辺ノードを展開", action: () => handleNodeExpand(node) },
-                      { label: "削除", action: () => {
-                        selectNode(node);
-                        void handleDeleteSelected();
-                      }, danger: true },
-                    ],
-                  });
-                } else if (target === "edge" && id) {
-                  const edge = allEdges.find((e) => e.id === id);
-                  if (!edge) return;
-                  setContextMenu({
-                    x,
-                    y,
-                    items: [
-                      { label: "Relationshipを編集", action: () => handleEdgeSelect(edge) },
-                      { label: "削除", action: () => {
-                        selectEdge(edge);
-                        void handleDeleteSelected();
-                      }, danger: true },
-                    ],
-                  });
-                } else if (target === "canvas") {
-                  setContextMenu({
-                    x,
-                    y,
-                    items: [{ label: "Nodeを追加", action: handleAddNode }],
-                  });
-                }
-              }}
+              onContextMenu={handleContextMenu}
+              onZoomChange={handleZoomChange}
             />
             <GraphControls
               layout={layout}
