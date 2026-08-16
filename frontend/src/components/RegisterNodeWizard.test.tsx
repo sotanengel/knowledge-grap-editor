@@ -49,8 +49,8 @@ describe("RegisterNodeWizard", () => {
     await user.type(screen.getByPlaceholderText("例: Apple"), "Apple");
     await user.click(screen.getByRole("button", { name: "次へ" }));
     await user.click(screen.getByRole("combobox"));
-    await waitFor(() => screen.getByText("組織 (Organization)"));
-    await user.click(screen.getByText("組織 (Organization)"));
+    await waitFor(() => screen.getByText("Organization"));
+    await user.click(screen.getByText("Organization"));
     await user.click(screen.getByRole("button", { name: "次へ" }));
     await user.click(screen.getByRole("button", { name: "次へ" }));
     await user.click(screen.getByRole("button", { name: "登録する" }));
@@ -69,8 +69,8 @@ describe("RegisterNodeWizard", () => {
     await user.type(screen.getByPlaceholderText("例: Apple"), "Apple");
     await user.click(screen.getByRole("button", { name: "次へ" }));
     await user.click(screen.getByRole("combobox"));
-    await waitFor(() => screen.getByText("組織 (Organization)"));
-    await user.click(screen.getByText("組織 (Organization)"));
+    await waitFor(() => screen.getByText("Organization"));
+    await user.click(screen.getByText("Organization"));
     await user.click(screen.getByRole("button", { name: "次へ" }));
     await user.click(screen.getByRole("button", { name: "次へ" }));
     await user.click(screen.getByRole("button", { name: "登録する" }));

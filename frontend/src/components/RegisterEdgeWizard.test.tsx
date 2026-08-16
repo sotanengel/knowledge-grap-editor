@@ -44,8 +44,8 @@ describe("RegisterEdgeWizard", () => {
     await user.click(screen.getByText("山田"));
     await user.click(screen.getByRole("button", { name: "次へ" }));
     await user.click(screen.getByRole("combobox"));
-    await waitFor(() => screen.getByText("所属 (worksFor)"));
-    await user.click(screen.getByText("所属 (worksFor)"));
+    await waitFor(() => screen.getByText("worksFor"));
+    await user.click(screen.getByText("worksFor"));
     await user.click(screen.getByRole("button", { name: "次へ" }));
     await waitFor(() => screen.getByText("Apple"));
     await user.click(screen.getByText("Apple"));

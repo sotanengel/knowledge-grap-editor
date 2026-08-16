@@ -140,7 +140,18 @@ export default function GraphPage() {
             )}
           </div>
         }
-        right={<Inspector />}
+        right={
+          <Inspector
+            selectedNode={selectedNode}
+            selectedEdge={selectedEdge}
+            nodes={nodes}
+            edges={edges}
+            onRefresh={() => loadGraph(searchQuery || undefined)}
+            onClearSelection={clearSelection}
+            onSelectNode={handleNodeSelect}
+            onSelectEdge={selectEdge}
+          />
+        }
       />
       <StatusBar
         nodeCount={nodes.length}
