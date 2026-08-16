@@ -35,7 +35,19 @@ describe("NodeInspector", () => {
 
   it("shows edit form when edit clicked", async () => {
     api.getClassProperties.mockResolvedValue([
+      {
+        id: "birthDate",
+        label: "birthDate",
+        description: "",
+        domain: ["Person"],
+        range: ["xsd:date"],
+        required: true,
+        aliases: [],
+      },
       { id: "email", label: "email", description: "", domain: [], range: [], required: false, aliases: [] },
+    ]);
+    api.listClasses.mockResolvedValue([
+      { id: "Person", label: "Person", description: "", aliases: [], parent_classes: [], examples: [] },
     ]);
     const user = userEvent.setup();
     render(
@@ -49,6 +61,37 @@ describe("NodeInspector", () => {
     );
     await user.click(screen.getByRole("button", { name: "編集" }));
     expect(screen.getByRole("button", { name: "保存" })).toBeInTheDocument();
+  });
+
+  it("blocks save when required property missing", async () => {
+    api.getClassProperties.mockResolvedValue([
+      {
+        id: "birthDate",
+        label: "birthDate",
+        description: "",
+        domain: ["Person"],
+        range: ["xsd:date"],
+        required: true,
+        aliases: [],
+      },
+    ]);
+    api.listClasses.mockResolvedValue([
+      { id: "Person", label: "Person", description: "", aliases: [], parent_classes: [], examples: [] },
+    ]);
+    const user = userEvent.setup();
+    render(
+      <NodeInspector
+        node={{ ...node, properties: {} }}
+        nodes={[node]}
+        edges={[]}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "編集" }));
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(screen.getByText(/必須/)).toBeInTheDocument());
+    expect(api.updateNode).not.toHaveBeenCalled();
   });
 
   it("shows delete confirmation dialog", async () => {

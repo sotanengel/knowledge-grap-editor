@@ -4,7 +4,7 @@ import { slugFromLabel, uniqueId } from "./idSlug";
 describe("idSlug", () => {
   it("creates slug from label", () => {
     expect(slugFromLabel("Apple Inc.")).toBe("apple-inc");
-    expect(slugFromLabel("山田太郎")).toBe("山田太郎");
+    expect(slugFromLabel("山田太郎")).toBe("node");
   });
 
   it("returns unique id when duplicate exists", () => {

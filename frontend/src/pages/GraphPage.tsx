@@ -1,22 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, Edge, Node } from "../api/client";
+import { api, Edge, Node, Relationship } from "../api/client";
 import ContextMenu from "../components/ui/ContextMenu";
 import GraphCanvas, { type GraphCanvasHandle } from "../features/graph/GraphCanvas";
 import GraphControls from "../features/graph/GraphControls";
+import RelationshipPickerDialog from "../features/graph/RelationshipPickerDialog";
 import type { LayoutName } from "../features/graph/nodeStyles";
 import { useGraphState } from "../features/graph/useGraphState";
 import Inspector, { type InspectorMode } from "../features/inspector/Inspector";
 import LeftNavigator from "../features/navigator/LeftNavigator";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { useToast } from "../hooks/useToast";
 import { useUndoRedo } from "../hooks/useUndoRedo";
 import ThreeColumnLayout from "../layout/ThreeColumnLayout";
 import StatusBar from "../layout/StatusBar";
+import { validateEdge } from "../utils/graphValidation";
+import { slugFromLabel, uniqueId } from "../utils/idSlug";
 
 export default function GraphPage() {
   const [searchParams] = useSearchParams();
   const [allNodes, setAllNodes] = useState<Node[]>([]);
   const [allEdges, setAllEdges] = useState<Edge[]>([]);
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [pendingConnection, setPendingConnection] = useState<{
+    sourceId: string;
+    targetId: string;
+  } | null>(null);
+  const [connectError, setConnectError] = useState("");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
   const [searchResults, setSearchResults] = useState<Node[]>([]);
   const [depth, setDepth] = useState(1);
@@ -41,6 +51,7 @@ export default function GraphPage() {
   const canvasRef = useRef<GraphCanvasHandle>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { push } = useUndoRedo();
+  const { showToast } = useToast();
   const {
     selectedNode,
     selectedEdge,
@@ -73,6 +84,7 @@ export default function GraphPage() {
     const q = searchParams.get("q") || "";
     setSearchQuery(q);
     loadGraph(q || undefined);
+    void api.listRelationships().then(setRelationships).catch(() => setRelationships([]));
   }, [searchParams, loadGraph]);
 
   const nodes = useMemo(() => {
@@ -153,6 +165,63 @@ export default function GraphPage() {
     setInspectorMode("create-edge");
     setDrawerOpen(true);
   }, []);
+
+  const handleConnectRequest = useCallback((sourceId: string, targetId: string) => {
+    setConnectError("");
+    setPendingConnection({ sourceId, targetId });
+  }, []);
+
+  const handleConfirmConnection = useCallback(
+    async (predicate: string) => {
+      if (!pendingConnection) return;
+      const { sourceId, targetId } = pendingConnection;
+      const validation = validateEdge(
+        { subject: sourceId, predicate, object: targetId },
+        relationships,
+        allNodes,
+        { existingEdges: allEdges },
+      );
+      if (!validation.valid) {
+        const msg = validation.formError ?? Object.values(validation.fieldErrors)[0] ?? "入力内容を確認してください";
+        setConnectError(msg);
+        showToast("error", msg);
+        return;
+      }
+
+      try {
+        const id = uniqueId(
+          slugFromLabel(`${predicate}-${sourceId}-${targetId}`),
+          new Set(allEdges.map((e) => e.id)),
+        );
+        const created = await api.createEdge({
+          id,
+          subject: sourceId,
+          predicate,
+          object: targetId,
+          properties: {},
+        });
+        setPendingConnection(null);
+        setConnectError("");
+        showToast("success", "Relationshipを作成しました");
+        await loadGraph(searchQuery || undefined);
+        handleEdgeSelect(created);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Relationshipの作成に失敗しました";
+        setConnectError(msg);
+        showToast("error", msg);
+      }
+    },
+    [
+      pendingConnection,
+      relationships,
+      allNodes,
+      allEdges,
+      loadGraph,
+      searchQuery,
+      handleEdgeSelect,
+      showToast,
+    ],
+  );
 
   const handleClearSelection = useCallback(() => {
     clearSelection();
@@ -330,11 +399,13 @@ export default function GraphPage() {
               onEdgeSelect={handleEdgeSelect}
               onNodeExpand={handleNodeExpand}
               onBackgroundClick={handleClearSelection}
+              onConnectRequest={handleConnectRequest}
               selectedNodeId={selectedNode?.id ?? null}
               selectedEdgeId={selectedEdge?.id ?? null}
               onContextMenu={handleContextMenu}
               onZoomChange={handleZoomChange}
             />
+            <p className="graph-hint">ノード右端のハンドルからドラッグして Relationship を作成できます</p>
             <GraphControls
               layout={layout}
               onLayoutChange={setLayout}
@@ -393,6 +464,34 @@ export default function GraphPage() {
           y={contextMenu.y}
           items={contextMenu.items}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+      {pendingConnection && (
+        <RelationshipPickerDialog
+          open
+          sourceNode={
+            allNodes.find((n) => n.id === pendingConnection.sourceId) ?? {
+              id: pendingConnection.sourceId,
+              label: pendingConnection.sourceId,
+              type: "",
+              properties: {},
+            }
+          }
+          targetNode={
+            allNodes.find((n) => n.id === pendingConnection.targetId) ?? {
+              id: pendingConnection.targetId,
+              label: pendingConnection.targetId,
+              type: "",
+              properties: {},
+            }
+          }
+          relationships={relationships}
+          error={connectError}
+          onConfirm={(predicate) => void handleConfirmConnection(predicate)}
+          onCancel={() => {
+            setPendingConnection(null);
+            setConnectError("");
+          }}
         />
       )}
     </>

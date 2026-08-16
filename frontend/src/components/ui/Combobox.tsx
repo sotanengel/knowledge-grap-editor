@@ -7,6 +7,7 @@ interface Props {
   onSelect?: (result: SuggestResult) => void;
   placeholder?: string;
   mode?: "class" | "relationship";
+  filterIds?: Set<string>;
 }
 
 function getJapaneseLabel(result: SuggestResult): string | undefined {
@@ -21,12 +22,18 @@ function formatDisplay(result: SuggestResult): string {
   return result.id;
 }
 
+function applyFilter(results: SuggestResult[], filterIds?: Set<string>): SuggestResult[] {
+  if (!filterIds) return results;
+  return results.filter((r) => filterIds.has(r.id));
+}
+
 export default function Combobox({
   value,
   onChange,
   onSelect,
   placeholder = "型を入力...",
   mode = "class",
+  filterIds,
 }: Props) {
   const [inputText, setInputText] = useState("");
   const [selected, setSelected] = useState<SuggestResult | null>(null);
@@ -42,15 +49,16 @@ export default function Combobox({
           mode === "relationship"
             ? await api.suggestRelationships(query)
             : await api.suggestTypes(query);
-        setSuggestions(res.results);
+        const filtered = applyFilter(res.results, filterIds);
+        setSuggestions(filtered);
         setHighlightIndex(0);
-        setOpen(res.results.length > 0);
+        setOpen(filtered.length > 0);
       } catch {
         setSuggestions([]);
         setOpen(false);
       }
     },
-    [mode],
+    [mode, filterIds],
   );
 
   useEffect(() => {

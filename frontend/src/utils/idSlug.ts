@@ -2,7 +2,9 @@ export function slugFromLabel(label: string): string {
   const slug = label
     .trim()
     .toLowerCase()
-    .replace(/[^\w\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]+/g, "-")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 50);
   return slug || "node";

@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { api, Edge, Node } from "../../api/client";
+import { useEffect, useMemo, useState } from "react";
+import { api, Edge, Node, Relationship } from "../../api/client";
 import Combobox from "../../components/ui/Combobox";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import PropertyForm from "../../components/ui/PropertyForm";
+import { filterRelationshipsByNodes, validateEdge } from "../../utils/graphValidation";
 
 interface Props {
   edge: Edge;
@@ -18,16 +19,52 @@ export default function EdgeInspector({ edge, nodes, onSave, onDelete, onSelectN
   const [predicate, setPredicate] = useState(edge.predicate);
   const [object, setObject] = useState(edge.object);
   const [properties, setProperties] = useState(edge.properties);
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [existingEdges, setExistingEdges] = useState<Edge[]>([]);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    void api.listRelationships().then(setRelationships).catch(() => setRelationships([]));
+    void api.listEdges().then(setExistingEdges).catch(() => setExistingEdges([]));
+  }, []);
+
+  const subjectNode = nodes.find((n) => n.id === subject);
+  const objectNode = nodes.find((n) => n.id === object);
+
+  const predicateFilterIds = useMemo(() => {
+    if (!subjectNode || !objectNode) return undefined;
+    const filtered = filterRelationshipsByNodes(subjectNode, objectNode, relationships);
+    return new Set(filtered.map((r) => r.id));
+  }, [subjectNode, objectNode, relationships]);
+
+  useEffect(() => {
+    if (predicate && predicateFilterIds && !predicateFilterIds.has(predicate)) {
+      setPredicate("");
+    }
+  }, [predicate, predicateFilterIds]);
 
   const nodeLabel = (id: string) => nodes.find((n) => n.id === id)?.label ?? id;
   const fromNode = nodes.find((n) => n.id === edge.subject);
   const toNode = nodes.find((n) => n.id === edge.object);
 
   const handleSave = async () => {
+    const validation = validateEdge(
+      { id: edge.id, subject, predicate, object },
+      relationships,
+      nodes,
+      { existingEdges, editingEdgeId: edge.id },
+    );
+    if (!validation.valid) {
+      setFieldErrors(validation.fieldErrors);
+      setError(validation.formError ?? "入力内容を確認してください");
+      return;
+    }
+
     setError("");
+    setFieldErrors({});
     setSaving(true);
     try {
       await api.updateEdge(edge.id, { subject, predicate, object, properties });
@@ -114,10 +151,17 @@ export default function EdgeInspector({ edge, nodes, onSave, onDelete, onSelectN
                 </option>
               ))}
             </select>
+            {fieldErrors.subject && <span className="field-error">{fieldErrors.subject}</span>}
           </label>
           <label>
             Relationship
-            <Combobox value={predicate} onChange={setPredicate} mode="relationship" />
+            <Combobox
+              value={predicate}
+              onChange={setPredicate}
+              mode="relationship"
+              filterIds={predicateFilterIds}
+            />
+            {fieldErrors.predicate && <span className="field-error">{fieldErrors.predicate}</span>}
           </label>
           <label>
             To
@@ -128,6 +172,7 @@ export default function EdgeInspector({ edge, nodes, onSave, onDelete, onSelectN
                 </option>
               ))}
             </select>
+            {fieldErrors.object && <span className="field-error">{fieldErrors.object}</span>}
           </label>
           <PropertyForm classId="" values={properties} onChange={setProperties} />
           {error && <p className="error">{error}</p>}
