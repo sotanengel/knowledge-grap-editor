@@ -10,7 +10,7 @@ const node = {
   id: "person-1",
   label: "山田太郎",
   type: "Person",
-  properties: { email: "a@example.com", description: "エンジニア" },
+  properties: { name: "山田太郎", email: "a@example.com", description: "エンジニア" },
 };
 
 describe("NodeInspector", () => {
@@ -35,6 +35,15 @@ describe("NodeInspector", () => {
 
   it("shows edit form when edit clicked", async () => {
     api.getClassProperties.mockResolvedValue([
+      {
+        id: "name",
+        label: "名前",
+        description: "",
+        domain: ["Person"],
+        range: ["xsd:string"],
+        required: false,
+        aliases: [],
+      },
       {
         id: "birthDate",
         label: "birthDate",
@@ -65,6 +74,15 @@ describe("NodeInspector", () => {
 
   it("blocks save when required property missing", async () => {
     api.getClassProperties.mockResolvedValue([
+      {
+        id: "name",
+        label: "名前",
+        description: "",
+        domain: ["Person"],
+        range: ["xsd:string"],
+        required: false,
+        aliases: [],
+      },
       {
         id: "birthDate",
         label: "birthDate",

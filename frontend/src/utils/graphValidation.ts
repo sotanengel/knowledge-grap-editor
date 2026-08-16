@@ -1,4 +1,5 @@
 import type { Edge, Node, OntologyClass, PropertyDef, Relationship } from "../api/client";
+import { NAME_PROPERTY } from "./nodeLabel";
 
 export interface ValidationResult {
   valid: boolean;
@@ -73,7 +74,14 @@ export function validateNode(
 ): ValidationResult {
   const fieldErrors: Record<string, string> = {};
 
-  if (!data.label.trim()) {
+  const nameProperty = propertyDefs.find((prop) => prop.id === NAME_PROPERTY);
+  const namePropertyApplies =
+    !!nameProperty && propertyAppliesToClass(nameProperty, data.type);
+  if (namePropertyApplies) {
+    if (!(data.properties[NAME_PROPERTY] ?? "").trim()) {
+      fieldErrors[`properties.${NAME_PROPERTY}`] = "名前を入力してください";
+    }
+  } else if (!data.label.trim()) {
     fieldErrors.label = "名前を入力してください";
   }
 

@@ -31,6 +31,15 @@ describe("NodeCreateForm", () => {
     });
     api.getClassProperties.mockResolvedValue([
       {
+        id: "name",
+        label: "名前",
+        description: "",
+        domain: ["Person"],
+        range: ["xsd:string"],
+        required: false,
+        aliases: [],
+      },
+      {
         id: "birthDate",
         label: "birthDate",
         description: "",
@@ -47,17 +56,23 @@ describe("NodeCreateForm", () => {
       id: "yamada",
       label: "山田太郎",
       type: "Person",
-      properties: { birthDate: "1990-01-01" },
+      properties: { name: "山田太郎", birthDate: "1990-01-01" },
     });
     const user = userEvent.setup();
     const { onCreated } = renderForm();
-    await user.type(screen.getByLabelText("名前"), "山田太郎");
     await user.click(screen.getByRole("combobox"));
     await waitFor(() => screen.getByText("Person"));
     await user.click(screen.getByText("Person"));
+    await user.type(screen.getByLabelText("名前"), "山田太郎");
     await user.type(screen.getByLabelText(/birthDate/), "1990-01-01");
     await user.click(screen.getByRole("button", { name: "作成" }));
     await waitFor(() => expect(api.createNode).toHaveBeenCalled());
+    expect(api.createNode).toHaveBeenCalledWith({
+      id: expect.any(String),
+      label: "山田太郎",
+      type: "Person",
+      properties: { name: "山田太郎", birthDate: "1990-01-01" },
+    });
     expect(onCreated).toHaveBeenCalled();
     expect(screen.getByRole("status")).toHaveTextContent("Nodeを作成しました");
   });
@@ -65,10 +80,10 @@ describe("NodeCreateForm", () => {
   it("blocks submit when required property is missing", async () => {
     const user = userEvent.setup();
     renderForm();
-    await user.type(screen.getByLabelText("名前"), "山田太郎");
     await user.click(screen.getByRole("combobox"));
     await waitFor(() => screen.getByText("Person"));
     await user.click(screen.getByText("Person"));
+    await user.type(screen.getByLabelText("名前"), "山田太郎");
     await waitFor(() => screen.getByLabelText(/birthDate/));
     await user.click(screen.getByRole("button", { name: "作成" }));
     await waitFor(() => expect(screen.getByText(/必須/)).toBeInTheDocument());

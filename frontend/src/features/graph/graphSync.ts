@@ -1,14 +1,17 @@
 import type { Core } from "cytoscape";
 import type { Edge, Node } from "../../api/client";
 import { buildNodeLabel } from "./nodeStyles";
+import { resolveNodeLabel } from "../../utils/nodeLabel";
 
 function getPrimaryAttr(node: Node): string | undefined {
   const props = node.properties;
-  return props.email ?? props.name ?? props.description ?? undefined;
+  return props.email ?? props.description ?? undefined;
 }
 
 export function graphSignature(nodes: Node[], edges: Edge[]): string {
-  const nodePart = nodes.map((n) => `${n.id}:${n.label}:${n.type}`).join("|");
+  const nodePart = nodes
+    .map((n) => `${n.id}:${resolveNodeLabel(n)}:${n.type}`)
+    .join("|");
   const edgePart = edges.map((e) => `${e.id}:${e.subject}:${e.predicate}:${e.object}`).join("|");
   return `${nodePart};;${edgePart}`;
 }
@@ -35,8 +38,9 @@ export function syncGraphElements(cy: Core, nodes: Node[], edges: Edge[]): boole
 
   for (const n of nodes) {
     const existing = cy.getElementById(n.id);
-    const displayLabel = buildNodeLabel(n.type, n.label, getPrimaryAttr(n));
-    const data = { id: n.id, label: n.label, type: n.type, displayLabel };
+    const label = resolveNodeLabel(n);
+    const displayLabel = buildNodeLabel(n.type, label, getPrimaryAttr(n));
+    const data = { id: n.id, label, type: n.type, displayLabel };
     if (existing.empty()) {
       cy.add({ group: "nodes", data });
       changed = true;

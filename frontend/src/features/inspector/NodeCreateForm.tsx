@@ -4,6 +4,7 @@ import Combobox from "../../components/ui/Combobox";
 import PropertyForm from "../../components/ui/PropertyForm";
 import { useToast } from "../../hooks/useToast";
 import { propertyErrorsForForm, validateNode } from "../../utils/graphValidation";
+import { resolveNodeLabel } from "../../utils/nodeLabel";
 import { slugFromLabel, uniqueId } from "../../utils/idSlug";
 
 interface Props {
@@ -13,10 +14,8 @@ interface Props {
 
 export default function NodeCreateForm({ onCreated, onCancel }: Props) {
   const { showToast } = useToast();
-  const [label, setLabel] = useState("");
   const [nodeId, setNodeId] = useState("");
   const [type, setType] = useState("");
-  const [description, setDescription] = useState("");
   const [properties, setProperties] = useState<Record<string, string>>({});
   const [propertyDefs, setPropertyDefs] = useState<PropertyDef[]>([]);
   const [existingNodeIds, setExistingNodeIds] = useState<Set<string>>(new Set());
@@ -31,10 +30,11 @@ export default function NodeCreateForm({ onCreated, onCancel }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!label.trim()) return;
-    const base = slugFromLabel(label);
+    const name = properties.name?.trim();
+    if (!name) return;
+    const base = slugFromLabel(name);
     setNodeId(uniqueId(base, existingNodeIds));
-  }, [label, existingNodeIds]);
+  }, [properties.name, existingNodeIds]);
 
   useEffect(() => {
     if (!type) {
@@ -50,9 +50,7 @@ export default function NodeCreateForm({ onCreated, onCancel }: Props) {
   const propertyFieldErrors = useMemo(() => propertyErrorsForForm(fieldErrors), [fieldErrors]);
 
   const handleCreate = async () => {
-    const props = { ...properties };
-    if (description) props.description = description;
-    if (!props.name) props.name = label;
+    const label = resolveNodeLabel({ label: "", properties });
 
     let defs = propertyDefs;
     if (type && defs.length === 0) {
@@ -75,7 +73,7 @@ export default function NodeCreateForm({ onCreated, onCancel }: Props) {
     }
 
     const validation = validateNode(
-      { id: nodeId, label, type, properties: props },
+      { id: nodeId, label, type, properties },
       defs,
       classList,
       { existingNodeIds },
@@ -91,7 +89,7 @@ export default function NodeCreateForm({ onCreated, onCancel }: Props) {
     setFieldErrors({});
     setSaving(true);
     try {
-      await api.createNode({ id: nodeId, label, type, properties: props });
+      await api.createNode({ id: nodeId, label, type, properties });
       showToast("success", "Nodeを作成しました");
       onCreated();
     } catch (e) {
@@ -107,18 +105,9 @@ export default function NodeCreateForm({ onCreated, onCancel }: Props) {
     <div data-testid="node-create-form">
       <h3>Nodeを追加</h3>
       <label>
-        名前
-        <input value={label} onChange={(e) => setLabel(e.target.value)} />
-        {fieldErrors.label && <span className="field-error">{fieldErrors.label}</span>}
-      </label>
-      <label>
         型
         <Combobox value={type} onChange={setType} mode="class" placeholder="型を検索..." />
         {fieldErrors.type && <span className="field-error">{fieldErrors.type}</span>}
-      </label>
-      <label>
-        説明
-        <input value={description} onChange={(e) => setDescription(e.target.value)} />
       </label>
       <label>
         ID

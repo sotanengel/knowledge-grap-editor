@@ -5,6 +5,7 @@ import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import PropertyForm from "../../components/ui/PropertyForm";
 import { getTypeDisplayLabel } from "../graph/nodeStyles";
 import { propertyErrorsForForm, validateNode } from "../../utils/graphValidation";
+import { nodePropertiesWithLabel, resolveNodeLabel } from "../../utils/nodeLabel";
 
 interface Props {
   node: Node;
@@ -24,9 +25,10 @@ export default function NodeInspector({
   onSelectEdge,
 }: Props) {
   const [editing, setEditing] = useState(false);
-  const [label, setLabel] = useState(node.label);
   const [type, setType] = useState(node.type);
-  const [properties, setProperties] = useState(node.properties);
+  const [properties, setProperties] = useState(() =>
+    nodePropertiesWithLabel(node.label, node.properties),
+  );
   const [propertyDefs, setPropertyDefs] = useState<PropertyDef[]>([]);
   const [classes, setClasses] = useState<OntologyClass[]>([]);
   const [error, setError] = useState("");
@@ -35,6 +37,8 @@ export default function NodeInspector({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const relatedEdges = edges.filter((e) => e.subject === node.id || e.object === node.id);
+  const displayProperties = nodePropertiesWithLabel(node.label, node.properties);
+  const displayName = resolveNodeLabel(node);
 
   useEffect(() => {
     void api.listClasses().then(setClasses).catch(() => setClasses([]));
@@ -51,9 +55,18 @@ export default function NodeInspector({
       .catch(() => setPropertyDefs([]));
   }, [type]);
 
+  useEffect(() => {
+    if (!editing) {
+      setType(node.type);
+      setProperties(nodePropertiesWithLabel(node.label, node.properties));
+    }
+  }, [node, editing]);
+
   const propertyFieldErrors = useMemo(() => propertyErrorsForForm(fieldErrors), [fieldErrors]);
 
   const handleSave = async () => {
+    const label = resolveNodeLabel({ label: node.label, properties });
+
     let defs = propertyDefs;
     if (type && defs.length === 0) {
       try {
@@ -110,7 +123,10 @@ export default function NodeInspector({
     }
   };
 
-  const nodeLabel = (id: string) => nodes.find((n) => n.id === id)?.label ?? id;
+  const nodeLabel = (id: string) => {
+    const n = nodes.find((item) => item.id === id);
+    return n ? resolveNodeLabel(n) : id;
+  };
 
   return (
     <div data-testid="node-inspector">
@@ -122,21 +138,16 @@ export default function NodeInspector({
             <div className="value">{getTypeDisplayLabel(node.type)}</div>
           </div>
           <div className="inspector-field">
-            <label>Name</label>
-            <div className="value">{node.label}</div>
-          </div>
-          <div className="inspector-field">
             <label>ID</label>
             <div className="value">{node.id}</div>
           </div>
-          {node.properties.description && (
-            <div className="inspector-field">
-              <label>Description</label>
-              <div className="value">{node.properties.description}</div>
-            </div>
-          )}
           <h4>Properties</h4>
-          <PropertyForm classId={node.type} values={node.properties} onChange={() => {}} readOnly />
+          <PropertyForm
+            classId={node.type}
+            values={displayProperties}
+            onChange={() => {}}
+            readOnly
+          />
           {relatedEdges.length > 0 && (
             <>
               <h4>Relationships</h4>
@@ -164,11 +175,6 @@ export default function NodeInspector({
       ) : (
         <>
           <label>
-            名前
-            <input value={label} onChange={(e) => setLabel(e.target.value)} />
-            {fieldErrors.label && <span className="field-error">{fieldErrors.label}</span>}
-          </label>
-          <label>
             型
             <Combobox value={type} onChange={setType} mode="class" />
             {fieldErrors.type && <span className="field-error">{fieldErrors.type}</span>}
@@ -193,7 +199,7 @@ export default function NodeInspector({
       <ConfirmDialog
         open={confirmDelete}
         title="Nodeの削除"
-        message={`「${node.label}」を削除しますか？\n\nこのNodeに接続されているRelationshipも削除されます。`}
+        message={`「${displayName}」を削除しますか？\n\nこのNodeに接続されているRelationshipも削除されます。`}
         confirmLabel="削除"
         danger
         onConfirm={handleDelete}

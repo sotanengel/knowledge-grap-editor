@@ -75,14 +75,14 @@ const nodes: Node[] = [
 ];
 
 describe("validateNode", () => {
-  it("requires label and type", () => {
+  it("requires name property and type", () => {
     const result = validateNode(
-      { id: "x", label: "  ", type: "", properties: {} },
+      { id: "x", label: "", type: "", properties: { name: "  " } },
       personProps,
       classes,
     );
     expect(result.valid).toBe(false);
-    expect(result.fieldErrors.label).toBeTruthy();
+    expect(result.fieldErrors["properties.name"]).toBeTruthy();
     expect(result.fieldErrors.type).toBeTruthy();
   });
 
@@ -98,7 +98,7 @@ describe("validateNode", () => {
 
   it("requires birthDate for Person", () => {
     const result = validateNode(
-      { id: "p2", label: "山田", type: "Person", properties: {} },
+      { id: "p2", label: "山田", type: "Person", properties: { name: "山田" } },
       personProps,
       classes,
     );
@@ -108,7 +108,12 @@ describe("validateNode", () => {
 
   it("rejects invalid date format", () => {
     const result = validateNode(
-      { id: "p2", label: "山田", type: "Person", properties: { birthDate: "not-a-date" } },
+      {
+        id: "p2",
+        label: "山田",
+        type: "Person",
+        properties: { name: "山田", birthDate: "not-a-date" },
+      },
       personProps,
       classes,
     );
@@ -118,7 +123,12 @@ describe("validateNode", () => {
 
   it("accepts valid Person node", () => {
     const result = validateNode(
-      { id: "p2", label: "山田", type: "Person", properties: { birthDate: "1990-01-15" } },
+      {
+        id: "p2",
+        label: "山田",
+        type: "Person",
+        properties: { name: "山田", birthDate: "1990-01-15" },
+      },
       personProps,
       classes,
     );
@@ -127,7 +137,12 @@ describe("validateNode", () => {
 
   it("rejects duplicate id on create", () => {
     const result = validateNode(
-      { id: "p1", label: "Dup", type: "Person", properties: { birthDate: "1990-01-15" } },
+      {
+        id: "p1",
+        label: "Dup",
+        type: "Person",
+        properties: { name: "Dup", birthDate: "1990-01-15" },
+      },
       personProps,
       classes,
       { existingNodeIds: new Set(["p1"]) },
@@ -138,7 +153,12 @@ describe("validateNode", () => {
 
   it("rejects invalid id format", () => {
     const result = validateNode(
-      { id: "bad id!", label: "Test", type: "Person", properties: { birthDate: "1990-01-15" } },
+      {
+        id: "bad id!",
+        label: "Test",
+        type: "Person",
+        properties: { name: "Test", birthDate: "1990-01-15" },
+      },
       personProps,
       classes,
     );
