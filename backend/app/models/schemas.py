@@ -55,6 +55,7 @@ class Edge(EdgeBase):
 
 class ClassBase(BaseModel):
     label: str
+    labels: list[str] = Field(default_factory=list)
     description: str = ""
     aliases: list[str] = Field(default_factory=list)
     parent_classes: list[str] = Field(default_factory=list)
@@ -133,6 +134,7 @@ class ValidationWarning(BaseModel):
 class SuggestResult(BaseModel):
     id: str
     label: str
+    labels: list[str] = Field(default_factory=list)
     description: str = ""
     score: float
     parent_classes: list[str] = Field(default_factory=list)

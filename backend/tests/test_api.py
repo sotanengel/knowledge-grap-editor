@@ -30,6 +30,24 @@ def test_list_ontology_classes(client: TestClient):
     ids = {c["id"] for c in classes}
     assert "Organization" in ids
     assert "Person" in ids
+    org = next(c for c in classes if c["id"] == "Organization")
+    assert org["label"] == "組織"
+    assert "組織" in org["labels"]
+    assert "Organization" in org["labels"]
+
+
+def test_class_properties(client: TestClient):
+    r = client.get("/api/ontology/classes/Person/properties")
+    assert r.status_code == 200
+    props = r.json()
+    prop_ids = {p["id"] for p in props}
+    assert "name" in prop_ids
+    assert "birthDate" in prop_ids
+
+
+def test_class_properties_not_found(client: TestClient):
+    r = client.get("/api/ontology/classes/NonExistent/properties")
+    assert r.status_code == 404
 
 
 def test_node_crud(client: TestClient):
@@ -76,6 +94,22 @@ def test_type_suggest(client: TestClient):
     results = r.json()["results"]
     assert len(results) > 0
     assert results[0]["id"] == "Organization"
+
+    r = client.get("/api/ontology/suggest?q=組織")
+    assert r.status_code == 200
+    assert r.json()["results"][0]["id"] == "Organization"
+
+    r = client.get("/api/ontology/suggest?q=スマホ")
+    assert r.status_code == 200
+    assert r.json()["results"][0]["id"] == "Product"
+
+    r = client.get("/api/ontology/suggest?q=Organ")
+    assert r.status_code == 200
+    assert r.json()["results"][0]["id"] == "Organization"
+
+    r = client.get("/api/ontology/suggest?q=")
+    assert r.status_code == 200
+    assert len(r.json()["results"]) >= 2
 
 
 def test_graph_search(client: TestClient):
