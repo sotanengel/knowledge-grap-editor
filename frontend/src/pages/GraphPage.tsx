@@ -405,7 +405,7 @@ export default function GraphPage() {
               onContextMenu={handleContextMenu}
               onZoomChange={handleZoomChange}
             />
-            <p className="graph-hint">ノード右端のハンドルからドラッグして Relationship を作成できます</p>
+            <p className="graph-hint">選択ノード右の●をドラッグして Relationship を作成できます</p>
             <GraphControls
               layout={layout}
               onLayoutChange={setLayout}

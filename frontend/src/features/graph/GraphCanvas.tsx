@@ -1,5 +1,5 @@
-import { useEffect, useImperativeHandle, useRef, forwardRef } from "react";
-import cytoscape, { Core } from "cytoscape";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
+import cytoscape, { Core, NodeSingular } from "cytoscape";
 import edgehandles from "cytoscape-edgehandles";
 import type { Edge, Node } from "../../api/client";
 import { graphSignature, syncGraphElements } from "./graphSync";
@@ -10,6 +10,14 @@ import {
 } from "./nodeStyles";
 
 cytoscape.use(edgehandles);
+
+interface EdgeHandlesInstance {
+  enable: () => void;
+  disable: () => void;
+  destroy: () => void;
+  start: (node: NodeSingular) => void;
+  stop: () => void;
+}
 
 export interface GraphCanvasHandle {
   fit: () => void;
@@ -54,6 +62,7 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
   },
   ref,
 ) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const nodesRef = useRef(nodes);
@@ -69,9 +78,9 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
   const onZoomChangeRef = useRef(onZoomChange);
   const onConnectRequestRef = useRef(onConnectRequest);
   const connectModeRef = useRef(connectMode);
-  const edgeHandlesRef = useRef<{ enable: () => void; disable: () => void; destroy: () => void } | null>(
-    null,
-  );
+  const edgeHandlesRef = useRef<EdgeHandlesInstance | null>(null);
+  const connectingRef = useRef(false);
+  const [handlePos, setHandlePos] = useState<{ x: number; y: number } | null>(null);
 
   nodesRef.current = nodes;
   edgesRef.current = edges;
@@ -83,6 +92,22 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
   onZoomChangeRef.current = onZoomChange;
   onConnectRequestRef.current = onConnectRequest;
   connectModeRef.current = connectMode;
+
+  const updateHandlePosition = useCallback(() => {
+    const cy = cyRef.current;
+    if (!cy || !selectedNodeId || !connectModeRef.current) {
+      setHandlePos(null);
+      return;
+    }
+    const ele = cy.getElementById(selectedNodeId);
+    if (ele.empty()) {
+      setHandlePos(null);
+      return;
+    }
+    const rp = ele.renderedPosition();
+    const w = ele.renderedOuterWidth();
+    setHandlePos({ x: rp.x + w / 2 + 8, y: rp.y });
+  }, [selectedNodeId]);
 
   useImperativeHandle(ref, () => ({
     fit: () => cyRef.current?.fit(undefined, 40),
@@ -158,20 +183,20 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
       onZoomChangeRef.current?.(cy.zoom());
     });
 
-    const eh = cy.edgehandles({
-      preview: true,
-      handleNodes: "node",
-      handlePosition: () => "middle right",
-      loopAllowed: () => false,
-      complete: (sourceNode, targetNode, addedEles) => {
-        addedEles.remove();
-        if (!connectModeRef.current) return;
-        const sourceId = (sourceNode as { id: () => string }).id();
-        const targetId = (targetNode as { id: () => string }).id();
-        if (sourceId === targetId) return;
-        onConnectRequestRef.current?.(sourceId, targetId);
-      },
+    cy.on("ehcomplete", (_evt, sourceNode, targetNode, addedEdge) => {
+      addedEdge.remove();
+      if (!connectModeRef.current) return;
+      const sourceId = sourceNode.id();
+      const targetId = targetNode.id();
+      if (sourceId === targetId) return;
+      onConnectRequestRef.current?.(sourceId, targetId);
     });
+
+    const eh = cy.edgehandles({
+      snap: true,
+      snapThreshold: 40,
+      canConnect: (sourceNode, targetNode) => !sourceNode.same(targetNode),
+    }) as EdgeHandlesInstance;
     edgeHandlesRef.current = eh;
     if (connectMode) eh.enable();
 
@@ -183,7 +208,6 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
       layoutAppliedRef.current = false;
       signatureRef.current = "";
     };
-    // Cytoscape instance is initialized once; connectMode toggles via separate effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional single init
   }, []);
 
@@ -203,14 +227,14 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
 
     const hadElements = signatureRef.current !== "";
     signatureRef.current = nextSignature;
-    const changed = syncGraphElements(cy, nodes, edges);
+    syncGraphElements(cy, nodes, edges);
 
     if (!layoutAppliedRef.current && nodes.length > 0) {
       cy.layout({ ...LAYOUT_OPTIONS[layout], animate: false }).run();
       layoutAppliedRef.current = true;
       prevLayoutRef.current = layout;
-    } else if (changed && hadElements) {
-      // Preserve positions; no re-layout on incremental updates
+    } else if (hadElements) {
+      // Preserve positions on incremental updates
     }
   }, [nodes, edges, layout]);
 
@@ -242,7 +266,56 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
     }
   }, [selectedNodeId, selectedEdgeId]);
 
-  return <div ref={containerRef} className="graph-canvas" data-testid="graph-canvas" />;
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    updateHandlePosition();
+    cy.on("pan zoom resize render", updateHandlePosition);
+    return () => {
+      if (typeof cy.off === "function") {
+        cy.off("pan zoom resize render", updateHandlePosition);
+      }
+    };
+  }, [updateHandlePosition, nodes, edges, layout]);
+
+  const handleConnectMouseDown = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const cy = cyRef.current;
+    const eh = edgeHandlesRef.current;
+    if (!cy || !eh || !selectedNodeId || !connectMode) return;
+
+    const node = cy.getElementById(selectedNodeId);
+    if (node.empty()) return;
+
+    connectingRef.current = true;
+    eh.start(node);
+
+    const onMouseUp = () => {
+      window.removeEventListener("mouseup", onMouseUp);
+      if (connectingRef.current) {
+        eh.stop();
+        connectingRef.current = false;
+      }
+    };
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
+  return (
+    <div ref={wrapperRef} className="graph-canvas-wrapper">
+      <div ref={containerRef} className="graph-canvas" data-testid="graph-canvas" />
+      {connectMode && handlePos && selectedNodeId && (
+        <button
+          type="button"
+          className="connect-handle"
+          aria-label="Relationshipを作成"
+          style={{ left: handlePos.x, top: handlePos.y }}
+          onMouseDown={handleConnectMouseDown}
+        />
+      )}
+    </div>
+  );
 });
 
 export default GraphCanvas;

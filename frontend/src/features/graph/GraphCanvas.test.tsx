@@ -14,6 +14,7 @@ vi.mock("cytoscape", () => {
   });
   const mockCy = {
     on: vi.fn(),
+    off: vi.fn(),
     add: vi.fn(),
     layout: vi.fn(() => ({ run: vi.fn() })),
     getElementById: vi.fn(() => ({
@@ -23,6 +24,8 @@ vi.mock("cytoscape", () => {
       addClass: vi.fn(),
       data: vi.fn(),
       remove: vi.fn(),
+      renderedPosition: vi.fn(() => ({ x: 100, y: 100 })),
+      renderedOuterWidth: vi.fn(() => 120),
     })),
     $: vi.fn(() => ({ unselect: vi.fn() })),
     nodes: vi.fn(() => makeCollection()),
@@ -36,6 +39,8 @@ vi.mock("cytoscape", () => {
       enable: vi.fn(),
       disable: vi.fn(),
       destroy: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
     })),
   };
   const cytoscapeFn = vi.fn(() => mockCy) as ReturnType<typeof vi.fn> & { use: ReturnType<typeof vi.fn> };
