@@ -123,3 +123,24 @@ def test_export_turtle(client: TestClient):
     r = client.get("/api/export?format=turtle")
     assert r.status_code == 200
     assert "text/turtle" in r.headers["content-type"]
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3001",
+        "http://localhost:3001",
+    ],
+)
+def test_cors_allows_frontend_origins(client: TestClient, origin: str):
+    r = client.options(
+        "/health",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") == origin

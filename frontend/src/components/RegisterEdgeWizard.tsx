@@ -60,6 +60,8 @@ export default function RegisterEdgeWizard({ onCancel }: { onCancel?: () => void
   const [predicate, setPredicate] = useState("");
   const [object, setObject] = useState("");
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [idWarning, setIdWarning] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -67,17 +69,27 @@ export default function RegisterEdgeWizard({ onCancel }: { onCancel?: () => void
       .then(([n, r]) => {
         setNodes(n);
         setRelationships(r);
+        setLoadError("");
       })
-      .catch(() => {});
+      .catch((e) => {
+        setLoadError(e instanceof Error ? e.message : "ノード一覧の取得に失敗しました");
+      });
   }, []);
 
   useEffect(() => {
     if (!subject || !predicate || !object) return;
-    const base = `${subject}-${predicate}-${object}`.slice(0, 40);
-    api.listEdges().then((edges) => {
-      const ids = new Set(edges.map((e) => e.id));
-      setEdgeId(uniqueId(slugFromLabel(base), ids));
-    });
+    const base = slugFromLabel(`${subject}-${predicate}-${object}`.slice(0, 40));
+    setEdgeId(base);
+    setIdWarning("");
+    api
+      .listEdges()
+      .then((edges) => {
+        const ids = new Set(edges.map((e) => e.id));
+        setEdgeId(uniqueId(base, ids));
+      })
+      .catch(() => {
+        setIdWarning("重複チェックできませんでした。保存時に ID が重複する可能性があります。");
+      });
   }, [subject, predicate, object]);
 
   const selectedRel = relationships.find((r) => r.id === predicate);
@@ -113,6 +125,7 @@ export default function RegisterEdgeWizard({ onCancel }: { onCancel?: () => void
               setSubject("");
               setPredicate("");
               setObject("");
+              setIdWarning("");
             }}
           >
             続けて登録
@@ -134,6 +147,8 @@ export default function RegisterEdgeWizard({ onCancel }: { onCancel?: () => void
           </li>
         ))}
       </ol>
+
+      {loadError && <p className="error">{loadError}</p>}
 
       {step === 0 && (
         <section className="wizard-panel">
@@ -195,6 +210,7 @@ export default function RegisterEdgeWizard({ onCancel }: { onCancel?: () => void
             <dt>終点</dt>
             <dd>{object}</dd>
           </dl>
+          {idWarning && <p className="warning">{idWarning}</p>}
         </section>
       )}
 
