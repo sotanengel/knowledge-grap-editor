@@ -140,6 +140,41 @@ export function buildCytoscapeStyles(): CytoscapeStyle[] {
         color: "#2563eb",
       },
     },
+    {
+      selector: ".eh-handle",
+      style: {
+        "background-color": "#2563eb",
+        width: 12,
+        height: 12,
+        shape: "ellipse",
+        "overlay-opacity": 0,
+        "border-width": 12,
+        "border-opacity": 0,
+      },
+    },
+    {
+      selector: ".eh-source",
+      style: {
+        "border-width": 3,
+        "border-color": "#2563eb",
+      },
+    },
+    {
+      selector: ".eh-target, .eh-presumptive-target",
+      style: {
+        "border-width": 3,
+        "border-color": "#22c55e",
+      },
+    },
+    {
+      selector: ".eh-preview, .eh-ghost-edge",
+      style: {
+        "line-color": "#2563eb",
+        "target-arrow-color": "#2563eb",
+        "source-arrow-color": "#2563eb",
+        width: 2,
+      },
+    },
   ];
 }
 

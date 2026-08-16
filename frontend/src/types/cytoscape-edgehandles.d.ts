@@ -1,18 +1,26 @@
+import type { NodeSingular } from "cytoscape";
 import "cytoscape";
 
 declare module "cytoscape" {
   interface EdgeHandlesOptions {
-    preview?: boolean;
-    handleNodes?: string;
-    handlePosition?: (node: unknown) => string;
-    loopAllowed?: () => boolean;
-    complete?: (sourceNode: unknown, targetNode: unknown, addedEdge: { remove: () => void }) => void;
+    canConnect?: (sourceNode: NodeSingular, targetNode: NodeSingular) => boolean;
+    edgeParams?: (sourceNode: NodeSingular, targetNode: NodeSingular) => Record<string, unknown>;
+    hoverDelay?: number;
+    snap?: boolean;
+    snapThreshold?: number;
+    snapFrequency?: number;
+    noEdgeEventsInDraw?: boolean;
+    disableBrowserGestures?: boolean;
   }
 
   interface EdgeHandlesInstance {
     enable: () => void;
     disable: () => void;
     destroy: () => void;
+    start: (node: NodeSingular) => void;
+    stop: () => void;
+    enableDrawMode: () => void;
+    disableDrawMode: () => void;
   }
 
   interface Core {
