@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import cytoscape, { Core } from "cytoscape";
-import type { Edge, Node } from "../api/client";
+import type { Edge, Node } from "../../api/client";
 
 interface Props {
   nodes: Node[];

@@ -14,42 +14,51 @@ export default function Header() {
     URL.revokeObjectURL(url);
   };
 
-  const navClass = (path: string) =>
-    location.pathname === path ? "nav-link active" : "nav-link";
+  const navClass = (paths: string[]) =>
+    paths.some((p) => location.pathname === p) ? "nav-link active" : "nav-link";
+
+  const isActive = (paths: string[]) =>
+    paths.some((p) => location.pathname === p) ? "page" : undefined;
 
   return (
     <header className="app-header">
       <div className="header-brand">
         <Link to="/" className="brand-link">
+          <span className="brand-icon" aria-hidden="true">
+            ◉
+          </span>
           ナレッジグラフ
         </Link>
       </div>
       <nav className="header-nav" aria-label="メインナビゲーション">
-        <Link to="/" className={navClass("/")} aria-current={location.pathname === "/" ? "page" : undefined}>
-          ホーム
+        <Link to="/" className={navClass(["/", "/browse"])} aria-current={isActive(["/", "/browse"])}>
+          グラフ
         </Link>
         <Link
-          to="/browse"
-          className={navClass("/browse")}
-          aria-current={location.pathname === "/browse" ? "page" : undefined}
+          to="/search"
+          className={navClass(["/search"])}
+          aria-current={isActive(["/search"])}
         >
-          閲覧
+          検索
         </Link>
         <Link
-          to="/register"
-          className={navClass("/register")}
-          aria-current={location.pathname === "/register" ? "page" : undefined}
+          to="/ontology"
+          className={navClass(["/ontology"])}
+          aria-current={isActive(["/ontology"])}
         >
-          登録
+          オントロジー
         </Link>
       </nav>
       <div className="header-actions">
+        <button type="button" className="btn-header btn-secondary" disabled title="準備中">
+          Import
+        </button>
         <select
           value=""
           onChange={(e) => e.target.value && handleExport(e.target.value)}
           aria-label="Export形式"
         >
-          <option value="">Export...</option>
+          <option value="">Export</option>
           <option value="turtle">Turtle</option>
           <option value="nt">N-Triples</option>
           <option value="jsonld">JSON-LD</option>

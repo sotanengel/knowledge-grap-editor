@@ -1,0 +1,27 @@
+:root {
+  --font-sans: Inter, "Noto Sans JP", system-ui, sans-serif;
+  --color-bg: #ffffff;
+  --color-surface: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-danger: #dc2626;
+  --color-header-bg: #1e293b;
+  --header-height: 40px;
+  --statusbar-height: 28px;
+  --pane-left-width: 280px;
+  --pane-right-width: 320px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
