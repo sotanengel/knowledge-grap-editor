@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from app.config import settings
 from app.models.schemas import (
     ClassCreate,
@@ -14,6 +16,22 @@ from app.models.schemas import (
 )
 from app.storage import rdf_constants as R
 from app.storage.oxigraph_store import OxigraphStore
+
+_JA_RE = re.compile(r"[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]")
+
+
+def _has_japanese(text: str) -> bool:
+    return bool(_JA_RE.search(text))
+
+
+def _pick_display_label(labels: list[str], aliases: list[str], class_id: str) -> str:
+    for lbl in labels:
+        if _has_japanese(lbl):
+            return lbl
+    for alias in aliases:
+        if _has_japanese(alias):
+            return alias
+    return labels[0] if labels else class_id
 
 
 class OntologyService:
@@ -45,19 +63,28 @@ class OntologyService:
                 classes[cid] = OntologyClass(
                     id=cid,
                     label=row.get("label", cid),
+                    labels=[],
                     description=row.get("desc", ""),
                     aliases=[],
                     parent_classes=[],
                     examples=[],
                 )
+            if row.get("label"):
+                lbl = row["label"]
+                if lbl not in classes[cid].labels:
+                    classes[cid].labels.append(lbl)
             if row.get("alias"):
-                classes[cid].aliases.append(row["alias"])
+                if row["alias"] not in classes[cid].aliases:
+                    classes[cid].aliases.append(row["alias"])
             if row.get("example"):
-                classes[cid].examples.append(row["example"])
+                if row["example"] not in classes[cid].examples:
+                    classes[cid].examples.append(row["example"])
             if row.get("parent"):
                 parent_id = R.class_id_from_uri(row["parent"])
                 if parent_id not in classes[cid].parent_classes:
                     classes[cid].parent_classes.append(parent_id)
+        for cls in classes.values():
+            cls.label = _pick_display_label(cls.labels, cls.aliases, cls.id)
         return list(classes.values())
 
     def get_class(self, class_id: str) -> OntologyClass | None:
@@ -65,6 +92,15 @@ class OntologyService:
             if cls.id == class_id:
                 return cls
         return None
+
+    def get_class_properties(self, class_id: str) -> list[PropertyDef]:
+        if not self.get_class(class_id):
+            return []
+        return [
+            prop
+            for prop in self.list_properties()
+            if not prop.domain or class_id in prop.domain
+        ]
 
     def create_class(self, data: ClassCreate) -> OntologyClass:
         uri = R.class_uri(data.id)

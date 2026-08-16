@@ -31,10 +31,21 @@ export interface Edge {
 export interface OntologyClass {
   id: string;
   label: string;
+  labels?: string[];
   description: string;
   aliases: string[];
   parent_classes: string[];
   examples: string[];
+}
+
+export interface PropertyDef {
+  id: string;
+  label: string;
+  description: string;
+  domain: string[];
+  range: string[];
+  required: boolean;
+  aliases: string[];
 }
 
 export interface Relationship {
@@ -49,6 +60,7 @@ export interface Relationship {
 export interface SuggestResult {
   id: string;
   label: string;
+  labels?: string[];
   description: string;
   score: number;
   parent_classes?: string[];
@@ -88,6 +100,8 @@ export const api = {
   getNeighbors: (id: string, depth = 1) =>
     request<NeighborResult>(`/api/nodes/${id}/neighbors?depth=${depth}`),
   listClasses: () => request<OntologyClass[]>("/api/ontology/classes"),
+  getClassProperties: (classId: string) =>
+    request<PropertyDef[]>(`/api/ontology/classes/${encodeURIComponent(classId)}/properties`),
   createClass: (data: OntologyClass & { force?: boolean }) =>
     request<OntologyClass>("/api/ontology/classes", {
       method: "POST",

@@ -35,6 +35,15 @@ def get_class(
     return cls
 
 
+@router.get("/classes/{class_id}/properties", response_model=list[PropertyDef])
+def get_class_properties(
+    class_id: str, ontology: OntologyService = Depends(get_ontology_service)
+) -> list[PropertyDef]:
+    if not ontology.get_class(class_id):
+        raise HTTPException(status_code=404, detail="Class が見つかりません")
+    return ontology.get_class_properties(class_id)
+
+
 @router.post("/classes", response_model=OntologyClass, status_code=201)
 def create_class(
     data: ClassCreate,
@@ -138,7 +147,7 @@ def delete_relationship(
 
 @router.get("/suggest", response_model=SuggestResponse)
 def suggest_classes(
-    q: str,
+    q: str = "",
     suggest: SuggestService = Depends(get_suggest_service),
 ) -> SuggestResponse:
     return suggest.suggest_classes(q)
