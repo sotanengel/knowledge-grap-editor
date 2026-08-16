@@ -1,5 +1,12 @@
 import { createContext, useContext } from "react";
-import type { ToastMessage, ToastType } from "./ToastProvider";
+
+export type ToastType = "success" | "error";
+
+export interface ToastMessage {
+  id: number;
+  type: ToastType;
+  text: string;
+}
 
 interface ToastContextValue {
   toasts: ToastMessage[];

@@ -31,7 +31,7 @@ describe("App", () => {
 
   it("shows search page", () => {
     renderWithRouter(<App />, { routerProps: { initialEntries: ["/search"] } });
-    expect(screen.getByRole("heading", { name: "検索" })).toBeInTheDocument();
+    expect(screen.getByTestId("search-panel")).toBeInTheDocument();
   });
 
   it("shows ontology page", () => {

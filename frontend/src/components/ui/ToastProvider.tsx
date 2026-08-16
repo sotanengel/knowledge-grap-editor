@@ -1,13 +1,5 @@
 import { useCallback, useState, type ReactNode } from "react";
-import { ToastContext } from "../hooks/useToast";
-
-export type ToastType = "success" | "error";
-
-export interface ToastMessage {
-  id: number;
-  type: ToastType;
-  text: string;
-}
+import { ToastContext, type ToastMessage, type ToastType } from "../../hooks/useToast";
 
 let toastId = 0;
 

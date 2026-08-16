@@ -268,8 +268,19 @@ button.danger {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.graph-controls button:hover {
-  background: #f1f5f9;
+.ontology-list li.selected {
+  background: #eff6ff;
+}
+
+.collapse-toggle {
+  margin: 0.5rem;
+  width: auto;
+}
+
+.graph-controls select {
+  width: auto;
+  font-size: 0.75rem;
+  padding: 0.2rem;
 }
 
 .modal-backdrop {
