@@ -35,7 +35,8 @@ describe("TypeSuggest", () => {
     render(<TypeSuggest value="" onChange={onChange} />);
     await user.click(screen.getByRole("combobox"));
     await waitFor(() => {
-      expect(screen.getByText("組織 (Organization)")).toBeInTheDocument();
+      expect(screen.getByText("Organization")).toBeInTheDocument();
+      expect(screen.getByText("組織")).toBeInTheDocument();
     });
   });
 
@@ -44,15 +45,15 @@ describe("TypeSuggest", () => {
     const onChange = vi.fn();
     render(<TypeSuggest value="" onChange={onChange} />);
     await user.click(screen.getByRole("combobox"));
-    await waitFor(() => screen.getByText("組織 (Organization)"));
-    await user.click(screen.getByText("組織 (Organization)"));
+    await waitFor(() => screen.getByText("Organization"));
+    await user.click(screen.getByText("Organization"));
     expect(onChange).toHaveBeenCalledWith("Organization");
   });
 
   it("displays label when value prop is set", async () => {
     render(<TypeSuggest value="Organization" onChange={vi.fn()} />);
     await waitFor(() => {
-      expect(screen.getByRole("combobox")).toHaveValue("組織 (Organization)");
+      expect(screen.getByRole("combobox")).toHaveValue("Organization — 組織");
     });
   });
 
@@ -61,7 +62,7 @@ describe("TypeSuggest", () => {
     const onChange = vi.fn();
     render(<TypeSuggest value="" onChange={onChange} />);
     await user.click(screen.getByRole("combobox"));
-    await waitFor(() => screen.getByText("組織 (Organization)"));
+    await waitFor(() => screen.getByText("Organization"));
     await user.keyboard("{Enter}");
     expect(onChange).toHaveBeenCalledWith("Organization");
   });

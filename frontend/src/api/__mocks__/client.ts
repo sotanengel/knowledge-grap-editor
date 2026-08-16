@@ -10,6 +10,8 @@ export const api = {
   getNeighbors: vi.fn().mockResolvedValue({ nodes: [], edges: [], center: null, depth: 1 }),
   getClassProperties: vi.fn().mockResolvedValue([]),
   createNode: vi.fn().mockResolvedValue({ id: "n1", label: "Test", type: "Person", properties: {} }),
+  updateNode: vi.fn().mockResolvedValue({ id: "n1", label: "Test", type: "Person", properties: {} }),
+  deleteNode: vi.fn().mockResolvedValue(undefined),
   createEdge: vi.fn().mockResolvedValue({
     id: "e1",
     subject: "a",
@@ -17,6 +19,14 @@ export const api = {
     object: "b",
     properties: {},
   }),
+  updateEdge: vi.fn().mockResolvedValue({
+    id: "e1",
+    subject: "a",
+    predicate: "worksFor",
+    object: "b",
+    properties: {},
+  }),
+  deleteEdge: vi.fn().mockResolvedValue(undefined),
   suggestTypes: vi.fn().mockResolvedValue({ results: [] }),
   suggestRelationships: vi.fn().mockResolvedValue({ results: [] }),
   exportRdf: vi.fn(),
@@ -32,6 +42,8 @@ export function resetApiMock() {
   api.getNeighbors.mockResolvedValue({ nodes: [], edges: [], center: null, depth: 1 });
   api.getClassProperties.mockResolvedValue([]);
   api.createNode.mockResolvedValue({ id: "n1", label: "Test", type: "Person", properties: {} });
+  api.updateNode.mockResolvedValue({ id: "n1", label: "Test", type: "Person", properties: {} });
+  api.deleteNode.mockResolvedValue(undefined);
   api.createEdge.mockResolvedValue({
     id: "e1",
     subject: "a",
@@ -39,6 +51,14 @@ export function resetApiMock() {
     object: "b",
     properties: {},
   });
+  api.updateEdge.mockResolvedValue({
+    id: "e1",
+    subject: "a",
+    predicate: "worksFor",
+    object: "b",
+    properties: {},
+  });
+  api.deleteEdge.mockResolvedValue(undefined);
   api.suggestTypes.mockResolvedValue({ results: [] });
   api.suggestRelationships.mockResolvedValue({ results: [] });
 }

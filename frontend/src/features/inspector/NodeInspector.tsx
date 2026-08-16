@@ -1,0 +1,150 @@
+import { useState } from "react";
+import { api, Edge, Node } from "../../api/client";
+import Combobox from "../../components/ui/Combobox";
+import ConfirmDialog from "../../components/ui/ConfirmDialog";
+import PropertyForm from "../../components/ui/PropertyForm";
+import { getTypeDisplayLabel } from "../graph/nodeStyles";
+
+interface Props {
+  node: Node;
+  edges: Edge[];
+  nodes: Node[];
+  onSave: () => void;
+  onDelete: () => void;
+  onSelectEdge?: (edge: Edge) => void;
+}
+
+export default function NodeInspector({
+  node,
+  edges,
+  nodes,
+  onSave,
+  onDelete,
+  onSelectEdge,
+}: Props) {
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(node.label);
+  const [type, setType] = useState(node.type);
+  const [properties, setProperties] = useState(node.properties);
+  const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const relatedEdges = edges.filter((e) => e.subject === node.id || e.object === node.id);
+
+  const handleSave = async () => {
+    setError("");
+    setFieldErrors({});
+    setSaving(true);
+    try {
+      await api.updateNode(node.id, { label, type, properties });
+      setEditing(false);
+      onSave();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await api.deleteNode(node.id);
+      setConfirmDelete(false);
+      onDelete();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "削除に失敗しました");
+    }
+  };
+
+  const nodeLabel = (id: string) => nodes.find((n) => n.id === id)?.label ?? id;
+
+  return (
+    <div data-testid="node-inspector">
+      <h3>Node</h3>
+      {!editing ? (
+        <>
+          <div className="inspector-field">
+            <label>Type</label>
+            <div className="value">{getTypeDisplayLabel(node.type)}</div>
+          </div>
+          <div className="inspector-field">
+            <label>Name</label>
+            <div className="value">{node.label}</div>
+          </div>
+          <div className="inspector-field">
+            <label>ID</label>
+            <div className="value">{node.id}</div>
+          </div>
+          {node.properties.description && (
+            <div className="inspector-field">
+              <label>Description</label>
+              <div className="value">{node.properties.description}</div>
+            </div>
+          )}
+          <h4>Properties</h4>
+          <PropertyForm classId={node.type} values={node.properties} onChange={() => {}} readOnly />
+          {relatedEdges.length > 0 && (
+            <>
+              <h4>Relationships</h4>
+              <ul className="node-list">
+                {relatedEdges.map((e) => (
+                  <li key={e.id} onClick={() => onSelectEdge?.(e)}>
+                    <strong>{e.predicate}</strong>
+                    <span>
+                      {nodeLabel(e.subject)} → {nodeLabel(e.object)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <div className="btn-row">
+            <button type="button" onClick={() => setEditing(true)}>
+              編集
+            </button>
+            <button type="button" className="btn-danger" onClick={() => setConfirmDelete(true)}>
+              削除
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <label>
+            名前
+            <input value={label} onChange={(e) => setLabel(e.target.value)} />
+          </label>
+          <label>
+            型
+            <Combobox value={type} onChange={setType} mode="class" />
+          </label>
+          <PropertyForm
+            classId={type}
+            values={properties}
+            onChange={setProperties}
+            errors={fieldErrors}
+          />
+          {error && <p className="error">{error}</p>}
+          <div className="btn-row">
+            <button type="button" onClick={handleSave} disabled={saving}>
+              {saving ? "保存中..." : "保存"}
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setEditing(false)}>
+              キャンセル
+            </button>
+          </div>
+        </>
+      )}
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Nodeの削除"
+        message={`「${node.label}」を削除しますか？\n\nこのNodeに接続されているRelationshipも削除されます。`}
+        confirmLabel="削除"
+        danger
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    </div>
+  );
+}
