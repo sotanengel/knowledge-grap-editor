@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+dist/
+*.local
+*.tsbuildinfo
+
+# Data
+data/*
+!data/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Env
+.env
+.env.*

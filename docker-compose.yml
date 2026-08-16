@@ -1,0 +1,38 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      - KG_DATA_DIR=/data
+      - KG_VALIDATION_MODE=warn
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - VITE_API_URL=http://127.0.0.1:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  mcp:
+    build: ./mcp
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - KG_BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  graph_data:
