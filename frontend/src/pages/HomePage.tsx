@@ -7,6 +7,7 @@ export default function HomePage() {
   const [classCount, setClassCount] = useState(0);
   const [classes, setClasses] = useState<OntologyClass[]>([]);
   const [quickQuery, setQuickQuery] = useState("");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,8 +16,11 @@ export default function HomePage() {
         setNodeCount(nodes.length);
         setClassCount(cls.length);
         setClasses(cls.slice(0, 6));
+        setError("");
       })
-      .catch(() => {});
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "データの取得に失敗しました");
+      });
   }, []);
 
   const handleQuickSearch = () => {
@@ -64,6 +68,7 @@ export default function HomePage() {
           <span>ノード・関係の新規登録</span>
         </Link>
       </section>
+      {error && <p className="error">{error}</p>}
       {classes.length > 0 && (
         <section>
           <h3>よく使う型</h3>

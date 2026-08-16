@@ -16,18 +16,27 @@ export default function RegisterNodeWizard({ onCancel }: { onCancel?: () => void
   const [type, setType] = useState("");
   const [properties, setProperties] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const [idWarning, setIdWarning] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!label.trim() || showIdEdit) return;
-    api.listNodes().then((nodes) => {
-      const ids = new Set(nodes.map((n) => n.id));
-      setNodeId(uniqueId(slugFromLabel(label), ids));
-    });
+    const base = slugFromLabel(label);
+    setNodeId(base);
+    setIdWarning("");
+    api
+      .listNodes()
+      .then((nodes) => {
+        const ids = new Set(nodes.map((n) => n.id));
+        setNodeId(uniqueId(base, ids));
+      })
+      .catch(() => {
+        setIdWarning("重複チェックできませんでした。保存時に ID が重複する可能性があります。");
+      });
   }, [label, showIdEdit]);
 
   const canNext = (): boolean => {
-    if (step === 0) return label.trim().length > 0 && nodeId.trim().length > 0;
+    if (step === 0) return label.trim().length > 0;
     if (step === 1) return type.trim().length > 0;
     return true;
   };
@@ -61,6 +70,7 @@ export default function RegisterNodeWizard({ onCancel }: { onCancel?: () => void
               setNodeId("");
               setType("");
               setProperties({});
+              setIdWarning("");
             }}
           >
             続けて登録
@@ -104,6 +114,7 @@ export default function RegisterNodeWizard({ onCancel }: { onCancel?: () => void
               <input value={nodeId} onChange={(e) => setNodeId(e.target.value)} />
             </label>
           )}
+          {idWarning && <p className="warning">{idWarning}</p>}
         </section>
       )}
 

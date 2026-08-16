@@ -1,10 +1,18 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
+const NETWORK_ERROR =
+  "Backend に接続できません（CORS または API URL を確認してください）";
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      ...options,
+    });
+  } catch {
+    throw new Error(NETWORK_ERROR);
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail));
