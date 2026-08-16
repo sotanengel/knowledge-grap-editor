@@ -1,5 +1,6 @@
 import { useEffect, useImperativeHandle, useRef, forwardRef } from "react";
 import cytoscape, { Core } from "cytoscape";
+import edgehandles from "cytoscape-edgehandles";
 import type { Edge, Node } from "../../api/client";
 import { graphSignature, syncGraphElements } from "./graphSync";
 import {
@@ -7,6 +8,8 @@ import {
   LAYOUT_OPTIONS,
   type LayoutName,
 } from "./nodeStyles";
+
+cytoscape.use(edgehandles);
 
 export interface GraphCanvasHandle {
   fit: () => void;
@@ -27,6 +30,8 @@ interface Props {
   onBackgroundClick?: () => void;
   onContextMenu?: (x: number, y: number, target: "node" | "edge" | "canvas", id?: string) => void;
   onZoomChange?: (zoom: number) => void;
+  onConnectRequest?: (sourceId: string, targetId: string) => void;
+  connectMode?: boolean;
   selectedNodeId?: string | null;
   selectedEdgeId?: string | null;
 }
@@ -42,6 +47,8 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
     onBackgroundClick,
     onContextMenu,
     onZoomChange,
+    onConnectRequest,
+    connectMode = true,
     selectedNodeId,
     selectedEdgeId,
   },
@@ -60,6 +67,11 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
   const onBackgroundClickRef = useRef(onBackgroundClick);
   const onContextMenuRef = useRef(onContextMenu);
   const onZoomChangeRef = useRef(onZoomChange);
+  const onConnectRequestRef = useRef(onConnectRequest);
+  const connectModeRef = useRef(connectMode);
+  const edgeHandlesRef = useRef<{ enable: () => void; disable: () => void; destroy: () => void } | null>(
+    null,
+  );
 
   nodesRef.current = nodes;
   edgesRef.current = edges;
@@ -69,6 +81,8 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
   onBackgroundClickRef.current = onBackgroundClick;
   onContextMenuRef.current = onContextMenu;
   onZoomChangeRef.current = onZoomChange;
+  onConnectRequestRef.current = onConnectRequest;
+  connectModeRef.current = connectMode;
 
   useImperativeHandle(ref, () => ({
     fit: () => cyRef.current?.fit(undefined, 40),
@@ -144,13 +158,41 @@ const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(
       onZoomChangeRef.current?.(cy.zoom());
     });
 
+    const eh = cy.edgehandles({
+      preview: true,
+      handleNodes: "node",
+      handlePosition: () => "middle right",
+      loopAllowed: () => false,
+      complete: (sourceNode, targetNode, addedEles) => {
+        addedEles.remove();
+        if (!connectModeRef.current) return;
+        const sourceId = (sourceNode as { id: () => string }).id();
+        const targetId = (targetNode as { id: () => string }).id();
+        if (sourceId === targetId) return;
+        onConnectRequestRef.current?.(sourceId, targetId);
+      },
+    });
+    edgeHandlesRef.current = eh;
+    if (connectMode) eh.enable();
+
     return () => {
+      edgeHandlesRef.current?.destroy();
+      edgeHandlesRef.current = null;
       cy.destroy();
       cyRef.current = null;
       layoutAppliedRef.current = false;
       signatureRef.current = "";
     };
+    // Cytoscape instance is initialized once; connectMode toggles via separate effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional single init
   }, []);
+
+  useEffect(() => {
+    const eh = edgeHandlesRef.current;
+    if (!eh) return;
+    if (connectMode) eh.enable();
+    else eh.disable();
+  }, [connectMode]);
 
   useEffect(() => {
     const cy = cyRef.current;

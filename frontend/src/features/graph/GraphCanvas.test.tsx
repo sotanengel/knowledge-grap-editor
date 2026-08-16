@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import GraphCanvas from "./GraphCanvas";
 
+vi.mock("cytoscape-edgehandles", () => ({
+  default: vi.fn(),
+}));
+
 vi.mock("cytoscape", () => {
   const makeCollection = () => ({
     forEach: vi.fn(),
@@ -28,8 +32,15 @@ vi.mock("cytoscape", () => {
     zoom: vi.fn(() => 1),
     center: vi.fn(),
     destroy: vi.fn(),
+    edgehandles: vi.fn(() => ({
+      enable: vi.fn(),
+      disable: vi.fn(),
+      destroy: vi.fn(),
+    })),
   };
-  return { default: vi.fn(() => mockCy) };
+  const cytoscapeFn = vi.fn(() => mockCy) as ReturnType<typeof vi.fn> & { use: ReturnType<typeof vi.fn> };
+  cytoscapeFn.use = vi.fn();
+  return { default: cytoscapeFn };
 });
 
 describe("GraphCanvas", () => {

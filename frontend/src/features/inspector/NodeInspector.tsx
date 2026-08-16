@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { api, Edge, Node } from "../../api/client";
+import { useEffect, useMemo, useState } from "react";
+import { api, Edge, Node, OntologyClass, PropertyDef } from "../../api/client";
 import Combobox from "../../components/ui/Combobox";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import PropertyForm from "../../components/ui/PropertyForm";
 import { getTypeDisplayLabel } from "../graph/nodeStyles";
+import { propertyErrorsForForm, validateNode } from "../../utils/graphValidation";
 
 interface Props {
   node: Node;
@@ -26,6 +27,8 @@ export default function NodeInspector({
   const [label, setLabel] = useState(node.label);
   const [type, setType] = useState(node.type);
   const [properties, setProperties] = useState(node.properties);
+  const [propertyDefs, setPropertyDefs] = useState<PropertyDef[]>([]);
+  const [classes, setClasses] = useState<OntologyClass[]>([]);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -33,7 +36,56 @@ export default function NodeInspector({
 
   const relatedEdges = edges.filter((e) => e.subject === node.id || e.object === node.id);
 
+  useEffect(() => {
+    void api.listClasses().then(setClasses).catch(() => setClasses([]));
+  }, []);
+
+  useEffect(() => {
+    if (!type) {
+      setPropertyDefs([]);
+      return;
+    }
+    void api
+      .getClassProperties(type)
+      .then(setPropertyDefs)
+      .catch(() => setPropertyDefs([]));
+  }, [type]);
+
+  const propertyFieldErrors = useMemo(() => propertyErrorsForForm(fieldErrors), [fieldErrors]);
+
   const handleSave = async () => {
+    let defs = propertyDefs;
+    if (type && defs.length === 0) {
+      try {
+        defs = await api.getClassProperties(type);
+        setPropertyDefs(defs);
+      } catch {
+        defs = [];
+      }
+    }
+
+    let classList = classes;
+    if (classList.length === 0) {
+      try {
+        classList = await api.listClasses();
+        setClasses(classList);
+      } catch {
+        classList = [];
+      }
+    }
+
+    const validation = validateNode(
+      { id: node.id, label, type, properties },
+      defs,
+      classList,
+      { editingNodeId: node.id },
+    );
+    if (!validation.valid) {
+      setFieldErrors(validation.fieldErrors);
+      setError("入力内容を確認してください");
+      return;
+    }
+
     setError("");
     setFieldErrors({});
     setSaving(true);
@@ -114,16 +166,18 @@ export default function NodeInspector({
           <label>
             名前
             <input value={label} onChange={(e) => setLabel(e.target.value)} />
+            {fieldErrors.label && <span className="field-error">{fieldErrors.label}</span>}
           </label>
           <label>
             型
             <Combobox value={type} onChange={setType} mode="class" />
+            {fieldErrors.type && <span className="field-error">{fieldErrors.type}</span>}
           </label>
           <PropertyForm
             classId={type}
             values={properties}
             onChange={setProperties}
-            errors={fieldErrors}
+            errors={propertyFieldErrors}
           />
           {error && <p className="error">{error}</p>}
           <div className="btn-row">
