@@ -1,2 +1,0 @@
-# knowledge-grap-editor
-ローカル環境でナレッジグラフを作成するためのwebアプリケーションです
