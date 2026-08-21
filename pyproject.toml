@@ -6,15 +6,23 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { file = "LICENSE" }
 dependencies = [
+    "fastapi>=0.115",
     "pyoxigraph>=0.5.9",
     "pydantic>=2.9",
+    "python-multipart>=0.0.20",
     "python-ulid>=3.0",
     "pyyaml>=6.0",
+    "uvicorn[standard]>=0.32",
 ]
+
+[project.scripts]
+ontoforge = "ontoforge.cli:main"
 
 [project.optional-dependencies]
 dev = [
+    "httpx>=0.28",
     "pytest>=8.3",
+    "anyio>=4.6",
     "pytest-cov>=6.0",
     "mypy>=1.13",
     "pre-commit>=3.8",
@@ -70,3 +78,4 @@ ignore_missing_imports = true
 testpaths = ["backend/tests"]
 pythonpath = ["backend/src"]
 addopts = "-q"
+markers = ["anyio: run the test on the anyio event loop"]
