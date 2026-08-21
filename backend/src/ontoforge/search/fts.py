@@ -18,9 +18,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
-from typing import Self
+from typing import Literal, Self
 
 INDEX_FILENAME = "search.sqlite3"
+#: Bumped whenever the table shape changes. The index is a derived cache, so a
+#: mismatch is resolved by rebuilding it rather than by migrating it.
+SCHEMA_VERSION = 2
 #: ASCII unit separator: cannot occur inside an IRI, so joining types is safe.
 TYPE_SEPARATOR = "\x1f"
 _MIN_TRIGRAM_LENGTH = 3
@@ -31,9 +34,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS entities USING fts5(
     label,
     comment,
     types UNINDEXED,
+    kind UNINDEXED,
     tokenize='trigram'
 );
+CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 """
+
+#: What a record describes: an instance in the data graph, or a term in the
+#: ontology. The canvas wants the first, the vocabulary tree the second.
+Kind = Literal["instance", "term"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +53,7 @@ class SearchRecord:
     label: str
     comment: str = ""
     types: tuple[str, ...] = field(default_factory=tuple)
+    kind: Kind = "instance"
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +64,7 @@ class SearchHit:
     label: str
     comment: str
     types: tuple[str, ...]
+    kind: Kind = "instance"
 
 
 class SearchIndex:
@@ -65,8 +76,37 @@ class SearchIndex:
         self.path = self.directory / filename
         self._connection = sqlite3.connect(self.path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
+        self._prepare()
+
+    def _prepare(self) -> None:
+        """Create the table, rebuilding it if it predates the current shape."""
+        if self._stored_version() not in (None, SCHEMA_VERSION):
+            self._connection.executescript(
+                "DROP TABLE IF EXISTS entities; DROP TABLE IF EXISTS schema_version;"
+            )
         self._connection.executescript(_SCHEMA)
+        self._connection.execute("DELETE FROM schema_version")
+        self._connection.execute(
+            "INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,)
+        )
         self._connection.commit()
+
+    def _stored_version(self) -> int | None:
+        try:
+            row = self._connection.execute("SELECT version FROM schema_version").fetchone()
+        except sqlite3.OperationalError:
+            # No version table: either a fresh file or an index from before it
+            # existed. The `entities` table tells the two apart.
+            existing = self._connection.execute(
+                "SELECT name FROM sqlite_master WHERE name = 'entities'"
+            ).fetchone()
+            return None if existing is None else 1
+        return None if row is None else int(row["version"])
+
+    @property
+    def stale(self) -> bool:
+        """Whether the index was rebuilt empty and needs repopulating."""
+        return self.count() == 0
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -119,8 +159,14 @@ class SearchIndex:
 
     def _insert(self, record: SearchRecord) -> None:
         self._connection.execute(
-            "INSERT INTO entities (iri, label, comment, types) VALUES (?, ?, ?, ?)",
-            (record.iri, record.label, record.comment, TYPE_SEPARATOR.join(record.types)),
+            "INSERT INTO entities (iri, label, comment, types, kind) VALUES (?, ?, ?, ?, ?)",
+            (
+                record.iri,
+                record.label,
+                record.comment,
+                TYPE_SEPARATOR.join(record.types),
+                record.kind,
+            ),
         )
 
     def _delete(self, iri: str) -> None:
@@ -137,6 +183,7 @@ class SearchIndex:
         query: str,
         *,
         type_iri: str | None = None,
+        kind: Kind | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[SearchHit]:
@@ -158,6 +205,10 @@ class SearchIndex:
             pattern = f"%{_escape_like(term)}%"
             parameters.extend([pattern, pattern])
 
+        if kind:
+            conditions.append("kind = ?")
+            parameters.append(kind)
+
         if type_iri:
             conditions.append("(types = ? OR types LIKE ? OR types LIKE ? OR types LIKE ?)")
             parameters.extend(
@@ -171,7 +222,7 @@ class SearchIndex:
 
         where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
         sql = (
-            "SELECT iri, label, comment, types FROM entities"
+            "SELECT iri, label, comment, types, kind FROM entities"
             f"{where} ORDER BY {order} LIMIT ? OFFSET ?"
         )
         parameters.extend([limit, offset])
@@ -185,7 +236,7 @@ class SearchIndex:
 
     def all_records(self) -> list[SearchHit]:
         rows = self._connection.execute(
-            "SELECT iri, label, comment, types FROM entities ORDER BY rowid"
+            "SELECT iri, label, comment, types, kind FROM entities ORDER BY rowid"
         ).fetchall()
         return [_hit(row) for row in rows]
 
@@ -197,6 +248,7 @@ def _hit(row: sqlite3.Row) -> SearchHit:
         label=row["label"],
         comment=row["comment"],
         types=tuple(part for part in raw_types.split(TYPE_SEPARATOR) if part),
+        kind=row["kind"] or "instance",
     )
 
 

@@ -99,3 +99,54 @@ def test_replace_all_rebuilds_the_index_in_one_go(index: SearchIndex) -> None:
 def test_a_query_full_of_punctuation_does_not_explode(index: SearchIndex) -> None:
     index.upsert(_record("iri:1", "ACME"))
     assert index.search('"*(){}[]^') == []
+
+
+# ---------------------------------------------------------------- instances vs terms
+
+
+def test_records_can_be_separated_into_instances_and_terms(index: SearchIndex) -> None:
+    index.upsert(SearchRecord(iri="iri:1", label="田中太郎", kind="instance"))
+    index.upsert(SearchRecord(iri="iri:2", label="人物", kind="term"))
+    assert [hit.iri for hit in index.search("", kind="instance")] == ["iri:1"]
+    assert [hit.iri for hit in index.search("", kind="term")] == ["iri:2"]
+    assert len(index.search("")) == 2
+
+
+def test_records_default_to_being_instances(index: SearchIndex) -> None:
+    index.upsert(_record("iri:1", "田中太郎"))
+    (hit,) = index.search("田中")
+    assert hit.kind == "instance"
+
+
+def test_the_kind_filter_combines_with_the_query(index: SearchIndex) -> None:
+    index.upsert(SearchRecord(iri="iri:1", label="人物", kind="term"))
+    index.upsert(SearchRecord(iri="iri:2", label="人物ではない", kind="instance"))
+    assert [hit.iri for hit in index.search("人物", kind="term")] == ["iri:1"]
+
+
+def test_an_index_from_an_older_schema_is_rebuilt_rather_than_migrated(tmp_path: Path) -> None:
+    import sqlite3
+
+    directory = tmp_path / "index"
+    directory.mkdir()
+    with sqlite3.connect(directory / "search.sqlite3") as legacy:
+        legacy.execute(
+            "CREATE VIRTUAL TABLE entities USING fts5("
+            "iri UNINDEXED, label, comment, types UNINDEXED, tokenize='trigram')"
+        )
+        legacy.execute("INSERT INTO entities VALUES ('iri:old', 'old', '', '')")
+
+    with SearchIndex(directory) as rebuilt:
+        # The index is a cache: dropping it is safe, and the runtime repopulates it.
+        assert rebuilt.stale
+        rebuilt.upsert(_record("iri:1", "田中太郎"))
+        assert [hit.iri for hit in rebuilt.search("田中")] == ["iri:1"]
+
+
+def test_reopening_a_current_index_keeps_its_contents(tmp_path: Path) -> None:
+    directory = tmp_path / "index"
+    with SearchIndex(directory) as first:
+        first.upsert(_record("iri:1", "田中太郎"))
+    with SearchIndex(directory) as second:
+        assert not second.stale
+        assert [hit.iri for hit in second.search("田中")] == ["iri:1"]
