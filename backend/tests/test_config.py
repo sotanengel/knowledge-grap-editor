@@ -22,13 +22,50 @@ def test_base_iri_is_normalised_to_end_with_a_separator() -> None:
     assert Settings(base_iri="https://example.org/kg").base_iri == "https://example.org/kg/"
 
 
-def test_derived_directories_live_under_the_data_dir(tmp_path: Path) -> None:
+def test_derived_directories_live_under_the_open_project(tmp_path: Path) -> None:
     settings = Settings(data_dir=tmp_path)
-    assert settings.store_dir == tmp_path / "store"
-    assert settings.snapshots_dir == tmp_path / "snapshots"
-    assert settings.changelog_dir == tmp_path / "changelog"
-    assert settings.index_dir == tmp_path / "index"
+    project = tmp_path / "projects" / "default"
+    assert settings.project == "default"
+    assert settings.store_dir == project / "store"
+    assert settings.snapshots_dir == project / "snapshots"
+    assert settings.changelog_dir == project / "changelog"
+    assert settings.index_dir == project / "index"
+    # The config file is shared: it configures the installation, not a project.
     assert settings.config_file == tmp_path / CONFIG_FILENAME
+
+
+def test_switching_project_moves_every_directory(tmp_path: Path) -> None:
+    settings = Settings(data_dir=tmp_path).for_project("research")
+    assert settings.store_dir == tmp_path / "projects" / "research" / "store"
+    assert settings.base_iri == "https://example.org/kg/"
+
+
+def test_the_phase_three_features_are_off_unless_asked_for() -> None:
+    settings = Settings()
+    assert settings.semantic_search is False
+    assert settings.git_snapshots is False
+    assert settings.git_remote is None
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("1", True),
+        ("true", True),
+        ("TRUE", True),
+        ("yes", True),
+        ("on", True),
+        ("0", False),
+        ("false", False),
+        ("", False),
+        ("nonsense", False),
+    ],
+)
+def test_boolean_environment_variables_read_the_usual_spellings(
+    tmp_path: Path, raw: str, expected: bool
+) -> None:
+    settings = load_settings(data_dir=tmp_path, env={"ONTOFORGE_SEMANTIC_SEARCH": raw})
+    assert settings.semantic_search is expected
 
 
 def test_ensure_directories_creates_the_whole_layout(tmp_path: Path) -> None:

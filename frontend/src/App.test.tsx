@@ -85,6 +85,20 @@ beforeEach(() => {
         return Promise.resolve(jsonResponse({ head: { vars: [] }, results: { bindings: [] } }));
       if (url.includes('/history'))
         return Promise.resolve(jsonResponse({ entries: [], can_undo: false, can_redo: false }));
+      if (url.includes('/projects'))
+        return Promise.resolve(
+          jsonResponse({
+            current: 'default',
+            projects: [
+              { id: 'default', name: 'デフォルト', createdAt: '2026-08-21T00:00:00Z' },
+              { id: 'research', name: '研究ノート', createdAt: '2026-08-21T00:00:00Z' },
+            ],
+          }),
+        );
+      if (url.includes('/semantic'))
+        return Promise.resolve(
+          jsonResponse({ enabled: false, indexed: 0, note: '学習済み埋め込みではないため…' }),
+        );
       return Promise.resolve(jsonResponse({}));
     }),
   );
@@ -145,5 +159,29 @@ describe('reusing a vocabulary term', () => {
     await waitFor(() => expect(screen.getByText('人物')).toBeInTheDocument());
     const term = screen.getByRole('button', { name: /人物/ });
     expect(term).toHaveAttribute('draggable', 'true');
+  });
+});
+
+describe('Phase 3 additions', () => {
+  it('offers the projects it knows about (FR-14)', async () => {
+    render(<App />);
+    const chooser = await screen.findByLabelText('プロジェクト');
+    expect(chooser).toHaveValue('default');
+    expect(screen.getByRole('option', { name: '研究ノート' })).toBeInTheDocument();
+  });
+
+  it('warns that switching swaps the whole graph space', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByLabelText('プロジェクトを管理'));
+    expect(screen.getByText(/履歴・元に戻す操作がまとめて入れ替わります/)).toBeInTheDocument();
+  });
+
+  it('says plainly that similar-label search is off and what it is', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('tab', { name: '類似検索' }));
+    expect(await screen.findByText('類似検索は既定で無効です。')).toBeInTheDocument();
+    expect(screen.getByText(/学習済み埋め込みではない/)).toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@
  */
 import type {
   CsvMapping,
+  GitStatus,
   EntityDocument,
   EntityPage,
   Explanation,
@@ -14,8 +15,12 @@ import type {
   HistoryPage,
   ImportSummary,
   OntologyTree,
+  ProjectList,
+  ProjectSummary,
   ReasonSummary,
   ReasonerProfiles,
+  SemanticHit,
+  SemanticStatus,
   SparqlResults,
   ValidationReport,
   VocabularyCatalogue,
@@ -218,6 +223,44 @@ export const api = {
     json<CsvMapping>(`${API}/mappings/${encodeURIComponent(mapping.name)}`, 'PUT', mapping),
 
   getMapping: (name: string) => request<CsvMapping>(`${API}/mappings/${encodeURIComponent(name)}`),
+
+  // ---------------------------------------------------------------- projects
+
+  projects: () => request<ProjectList>(`${API}/projects`),
+
+  createProject: (name: string, id?: string) =>
+    json<ProjectSummary>(`${API}/projects`, 'POST', { name, id }),
+
+  switchProject: (id: string) =>
+    request<{ current: string }>(`${API}/projects/${encodeURIComponent(id)}/switch`, {
+      method: 'POST',
+    }),
+
+  renameProject: (id: string, name: string) =>
+    json<ProjectSummary>(`${API}/projects/${encodeURIComponent(id)}`, 'PATCH', { name }),
+
+  deleteProject: (id: string) =>
+    request<{ deleted: string; current: string }>(`${API}/projects/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  // ---------------------------------------------------------------- semantic
+
+  semanticStatus: () => request<SemanticStatus>(`${API}/semantic`),
+
+  semanticSearch: (q: string, limit = 10) =>
+    request<{ results: SemanticHit[] }>(
+      `${API}/semantic/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
+
+  // ---------------------------------------------------------------- git
+
+  gitStatus: () => request<GitStatus>(`${API}/git`),
+
+  gitCommit: () =>
+    request<{ committed: boolean; revision: string | null; files: number }>(`${API}/git/commit`, {
+      method: 'POST',
+    }),
 
   // ---------------------------------------------------------------- history
 

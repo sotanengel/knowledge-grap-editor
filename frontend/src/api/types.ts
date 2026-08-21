@@ -167,3 +167,35 @@ export interface ImportSummary {
   iris: string[];
   format: string;
 }
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface ProjectList {
+  current: string;
+  projects: ProjectSummary[];
+}
+
+export interface SemanticStatus {
+  enabled: boolean;
+  indexed: number;
+  note: string;
+}
+
+export interface SemanticHit {
+  iri: string;
+  label: string;
+  score: number;
+}
+
+export interface GitStatus {
+  available: boolean;
+  enabled: boolean;
+  initialised: boolean;
+  pending: string[];
+  log: { revision: string; timestamp: string; subject: string }[];
+  remote: string | null;
+}
