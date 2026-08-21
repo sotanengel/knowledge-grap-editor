@@ -53,9 +53,11 @@ RUN --mount=type=secret,id=takumi_guard_token,required=false \
 # A failure stops the build: falling back silently would leave the image
 # measuring surface similarity while claiming to measure meaning. Pass
 # --allow-missing to build the fallback-only image on purpose.
+# safetensors is needed to read the published weights and nothing else, so it
+# is brought in for this one command rather than added to the runtime image.
 COPY scripts/fetch_embedding_model.py ./scripts/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv run --no-sync python scripts/fetch_embedding_model.py \
+    uv run --no-sync --with safetensors python scripts/fetch_embedding_model.py \
       --out backend/src/ontoforge/semantic/model
 
 
