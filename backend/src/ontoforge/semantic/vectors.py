@@ -1,35 +1,30 @@
-"""Local vector search, with no model and no network (§14 Phase 3).
+"""The vector index behind similar-label search (§14 Phase 3).
 
-The requirement that shaped this: OntoForge must work with the network unplugged
-(NFR-06) and the image should stay under 400MB. A sentence-transformer would
-break both. So the default here is **off**, and when it is switched on the
-vectors come from hashed character n-grams computed in-process.
+A small SQLite table of one vector per label, scanned in full at query time.
+That is fine at the scale this tool targets (§15.2 Q2: tens of thousands of
+triples) and avoids a vector-database dependency for a feature that is off by
+default.
 
-That is a weaker signal than a trained embedding -- it captures surface
-similarity, not meaning -- and the tool says so rather than implying otherwise.
-It is genuinely useful for the case it is good at: finding "田中太郎" from
-"田中" or "たなか", and near-duplicate labels. Anything more needs a model, which
-is an explicit opt-in the operator makes, not a default that quietly phones home.
+What produced the vectors matters more than how they are stored: an index built
+by one embedder cannot be searched with another, because the numbers mean
+different things. The embedder is recorded alongside the vectors and a mismatch
+empties the index rather than returning quiet nonsense -- the same reasoning as
+the full-text index's schema version.
 """
 
 from __future__ import annotations
 
-import math
-import re
 import sqlite3
-import unicodedata
-from collections.abc import Iterable, Sequence
+import struct
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 from typing import Self
 
+from ontoforge.semantic.embedder import Embedder, cosine, load_embedder
+
 INDEX_FILENAME = "vectors.sqlite3"
-#: Hashing into a fixed number of buckets keeps every vector the same length
-#: without needing a vocabulary.
-DIMENSIONS = 512
-#: Character n-gram sizes; 2 and 3 together handle CJK and latin alike.
-NGRAM_SIZES = (2, 3)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS vectors (
@@ -37,9 +32,11 @@ CREATE TABLE IF NOT EXISTS vectors (
     label TEXT NOT NULL,
     vector BLOB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS meta (
+    embedder TEXT NOT NULL,
+    dimensions INTEGER NOT NULL
+);
 """
-
-_WHITESPACE = re.compile(r"\s+")
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,62 +48,55 @@ class Similar:
     score: float
 
 
-def normalise(text: str) -> str:
-    """Fold width and case so ＡＢＣ, ABC and abc hash alike."""
-    return _WHITESPACE.sub(" ", unicodedata.normalize("NFKC", text).casefold()).strip()
-
-
-def ngrams(text: str, sizes: Sequence[int] = NGRAM_SIZES) -> list[str]:
-    cleaned = normalise(text)
-    if not cleaned:
-        return []
-    found: list[str] = []
-    for size in sizes:
-        if len(cleaned) < size:
-            found.append(cleaned)
-            continue
-        found.extend(cleaned[index : index + size] for index in range(len(cleaned) - size + 1))
-    return found
-
-
-def embed(text: str, *, dimensions: int = DIMENSIONS) -> list[float]:
-    """A unit-length hashed n-gram vector. Deterministic, and offline."""
-    vector = [0.0] * dimensions
-    for gram in ngrams(text):
-        # Python's hash() is salted per process, so a stable hash is needed for
-        # an index that outlives the process.
-        bucket = _stable_hash(gram) % dimensions
-        vector[bucket] += 1.0
-
-    length = math.sqrt(sum(value * value for value in vector))
-    if length == 0.0:
-        return vector
-    return [value / length for value in vector]
-
-
-def _stable_hash(text: str) -> int:
-    import hashlib
-
-    return int.from_bytes(hashlib.blake2b(text.encode("utf-8"), digest_size=8).digest(), "big")
-
-
-def cosine(left: Sequence[float], right: Sequence[float]) -> float:
-    """Both vectors are unit length, so the dot product is the cosine."""
-    return sum(a * b for a, b in zip(left, right, strict=True))
-
-
 class VectorIndex:
     """The optional vector index, alongside the full-text one."""
 
-    def __init__(self, directory: Path | str, *, dimensions: int = DIMENSIONS) -> None:
+    def __init__(
+        self,
+        directory: Path | str,
+        *,
+        embedder: Embedder | None = None,
+    ) -> None:
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / INDEX_FILENAME
-        self.dimensions = dimensions
+        self.embedder = embedder if embedder is not None else load_embedder()
+
         self._connection = sqlite3.connect(self.path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
+        self._prepare()
+
+    @property
+    def dimensions(self) -> int:
+        return self.embedder.dimensions
+
+    # ------------------------------------------------------------------ lifecycle
+
+    def _prepare(self) -> None:
+        """Create the table, emptying it if a different embedder filled it."""
         self._connection.executescript(_SCHEMA)
+        row = self._connection.execute("SELECT embedder, dimensions FROM meta").fetchone()
+
+        matches = (
+            row is not None
+            and row["embedder"] == self.embedder.name
+            and int(row["dimensions"]) == self.embedder.dimensions
+        )
+        if not matches:
+            # Vectors from two embedders are not comparable, so the old ones go.
+            # The index is a derived cache; the runtime refills it.
+            self._connection.execute("DELETE FROM vectors")
+            self._connection.execute("DELETE FROM meta")
+            self._connection.execute(
+                "INSERT INTO meta (embedder, dimensions) VALUES (?, ?)",
+                (self.embedder.name, self.embedder.dimensions),
+            )
         self._connection.commit()
+
+    @property
+    def stale(self) -> bool:
+        """Whether the index is empty and needs repopulating."""
+        return self.count() == 0
 
     def close(self) -> None:
         self._connection.close()
@@ -129,7 +119,7 @@ class VectorIndex:
             self._connection.execute(
                 "INSERT INTO vectors (iri, label, vector) VALUES (?, ?, ?) "
                 "ON CONFLICT(iri) DO UPDATE SET label = excluded.label, vector = excluded.vector",
-                (iri, label, _pack(embed(label, dimensions=self.dimensions))),
+                (iri, label, _pack(self.embedder.embed(label))),
             )
 
     def delete(self, iri: str) -> None:
@@ -142,12 +132,13 @@ class VectorIndex:
             self._connection.execute("DELETE FROM vectors")
             self._connection.executemany(
                 "INSERT INTO vectors (iri, label, vector) VALUES (?, ?, ?)",
-                [
-                    (iri, label, _pack(embed(label, dimensions=self.dimensions)))
-                    for iri, label in materialised
-                ],
+                [(iri, label, _pack(self.embedder.embed(label))) for iri, label in materialised],
             )
         return len(materialised)
+
+    def clear(self) -> None:
+        with self._connection:
+            self._connection.execute("DELETE FROM vectors")
 
     # ------------------------------------------------------------------ reads
 
@@ -156,14 +147,16 @@ class VectorIndex:
         return int(row["n"])
 
     def search(self, query: str, *, limit: int = 10, threshold: float = 0.0) -> list[Similar]:
-        """Nearest labels first. A brute-force scan, which is fine at this scale."""
-        target = embed(query, dimensions=self.dimensions)
+        """Nearest labels first. A full scan, which is fine at this scale."""
+        target = self.embedder.embed(query)
         if not any(target):
             return []
 
         scored = [
             Similar(
-                iri=row["iri"], label=row["label"], score=cosine(target, _unpack(row["vector"]))
+                iri=row["iri"],
+                label=row["label"],
+                score=cosine(target, _unpack(row["vector"])),
             )
             for row in self._connection.execute("SELECT iri, label, vector FROM vectors")
         ]
@@ -172,13 +165,9 @@ class VectorIndex:
         return matching[:limit]
 
 
-def _pack(vector: Sequence[float]) -> bytes:
-    import struct
-
+def _pack(vector: list[float]) -> bytes:
     return struct.pack(f"<{len(vector)}f", *vector)
 
 
 def _unpack(payload: bytes) -> list[float]:
-    import struct
-
     return list(struct.unpack(f"<{len(payload) // 4}f", payload))

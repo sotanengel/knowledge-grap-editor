@@ -31,11 +31,18 @@ OWL_SAME_AS = NamedNode(f"{OWL}sameAs")
 
 
 class Profile(StrEnum):
-    """How much inference to do (§10.1, ``ONTOFORGE_REASONER``)."""
+    """How much inference to do (§10.1, ``ONTOFORGE_REASONER``).
+
+    ``owl2-rl`` goes beyond what §10.1 lists under "やらないこと": it classifies
+    by class expression, because §5.3 names owlrl and owlrl does that. Anyone who
+    wants the narrower behaviour §10.1 describes can stay on ``rdfs`` or
+    ``rl-lite``, which is why all three remain.
+    """
 
     NONE = "none"
     RDFS = "rdfs"
     RL_LITE = "rl-lite"
+    OWL2_RL = "owl2-rl"
 
 
 #: A pattern is a triple of terms, where ``None`` in a slot matches anything and
@@ -170,10 +177,40 @@ RL_LITE_RULES: tuple[Rule, ...] = (
     ),
 )
 
+#: What ``owl2-rl`` adds beyond the executable rules above. These are owlrl's,
+#: not ours: they are named here only so the settings screen can say what
+#: turning the profile up actually buys. They are deliberately *not* ``Rule``
+#: objects -- nothing in this project can execute them, and pretending otherwise
+#: would let the step-namer in :mod:`ontoforge.reasoning.justify` claim a rule it
+#: never ran.
+OWL2_RL_EXTRAS: tuple[dict[str, str], ...] = (
+    {
+        "name": "owl:propertyChainAxiom",
+        "description": "プロパティの連鎖をたどる（所属先の親会社にも所属）",
+    },
+    {
+        "name": "owl:someValuesFrom / owl:hasValue",
+        "description": "「〜を持つものは〜である」という定義から分類する",
+    },
+    {
+        "name": "owl:intersectionOf / owl:unionOf",
+        "description": "「A かつ B」という定義から分類する",
+    },
+    {
+        "name": "owl:FunctionalProperty / owl:InverseFunctionalProperty",
+        "description": "一意な値から同一性を導く",
+    },
+)
+
+#: The *executable* rules per profile. Materialisation itself runs through owlrl
+#: (:mod:`ontoforge.reasoning.closure`); these let
+#: :mod:`ontoforge.reasoning.justify` name the step it recovered, where one of
+#: them accounts for it.
 _BY_PROFILE: dict[Profile, tuple[Rule, ...]] = {
     Profile.NONE: (),
     Profile.RDFS: RDFS_RULES,
     Profile.RL_LITE: RDFS_RULES + RL_LITE_RULES,
+    Profile.OWL2_RL: RDFS_RULES + RL_LITE_RULES,
 }
 
 
@@ -184,4 +221,9 @@ def rules_for(profile: Profile | str) -> Sequence[Rule]:
 
 def describe_profile(profile: Profile | str) -> list[dict[str, str]]:
     """Rule names and plain-language descriptions, for the settings screen."""
-    return [{"name": rule.name, "description": rule.description} for rule in rules_for(profile)]
+    described = [
+        {"name": rule.name, "description": rule.description} for rule in rules_for(profile)
+    ]
+    if Profile(profile) is Profile.OWL2_RL:
+        described.extend(OWL2_RL_EXTRAS)
+    return described

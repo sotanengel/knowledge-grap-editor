@@ -1,11 +1,11 @@
 /**
  * Similar-label search (§14 Phase 3).
  *
- * The panel says plainly what this is: a surface-similarity signal computed
- * locally from character n-grams, not a trained embedding. It is good at
- * finding 「田中太郎」 from 「田中」 or spotting near-duplicate labels, and it
- * does not understand meaning. Saying so is better than letting someone read
- * more into the scores than is there.
+ * Which similarity is being measured decides what a score means, so the panel
+ * says which embedder produced it. With the trained embedding in the image,
+ * 「企業」 finds 「株式会社アクメ」; with only the character n-gram fallback it
+ * finds nothing there, and the panel says so rather than letting someone read
+ * more into a number than is in it.
  */
 import { useEffect, useState } from 'react';
 
@@ -33,7 +33,9 @@ export function SemanticPanel() {
     return (
       <div className="space-y-2 p-4 text-sm text-slate-600 dark:text-slate-300">
         <p>類似検索は既定で無効です。</p>
-        <p className="text-xs text-slate-500">{status.note}</p>
+        <p className="text-xs text-slate-500">
+          このイメージで使えるのは <strong>{status.embedder}</strong> です。{status.note}
+        </p>
         <pre className="rounded bg-slate-100 p-2 text-xs dark:bg-slate-800">
           docker run -e ONTOFORGE_SEMANTIC_SEARCH=1 …
         </pre>
@@ -76,12 +78,28 @@ export function SemanticPanel() {
         >
           探す
         </button>
-        {status && <span className="text-xs text-slate-500">{status.indexed} 件を索引済み</span>}
+        {status && (
+          <span className="text-xs text-slate-500">
+            {status.indexed} 件を索引済み
+            {status.quality === 'surface' && '（表記のゆれのみ）'}
+          </span>
+        )}
       </form>
 
       <div className="min-h-0 flex-1 overflow-auto p-2 text-sm">
         <ErrorNote message={error} />
-        {status && <p className="mb-2 text-[10px] text-slate-500">{status.note}</p>}
+        {status && (
+          // Kept visible either way: a reader looking at 0.18 deserves to know
+          // what kind of similarity produced it. Only the emphasis differs --
+          // the surface fallback is weaker than the number suggests.
+          <p
+            className={`mb-2 text-[10px] ${
+              status.quality === 'surface' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500'
+            }`}
+          >
+            {status.note}
+          </p>
+        )}
         <ul className="space-y-1">
           {hits.map((hit) => (
             <li key={hit.iri} className="flex items-center gap-2">

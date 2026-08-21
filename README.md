@@ -31,9 +31,10 @@ backend/src/ontoforge/
   io/           インポート／エクスポート（RDF・CSV・GraphML・Mermaid）
   rdfstar.py    RDF 1.2 三重項によるエッジ属性
   projects/     複数のグラフ空間（FR-14）
-  semantic/     ローカル類似検索（既定オフ）
+  semantic/     類似検索。同梱の学習済み埋め込み、無ければ文字 n-gram
   gitsync/      スナップショットの Git 版管理
-  reasoning/    ルールベース推論（none / rdfs / rl-lite）＋導出根拠
+  reasoning/    owlrl による推論、ノイズ除去、根拠の逆算
+  rdflib_bridge.py  pyoxigraph ⇄ rdflib（SHACL と推論で共有）
   validation/   SHACL シェイプ生成と pySHACL 検証
   vocab/        同梱語彙（schema.org / SKOS / FOAF / DCTERMS / PROV-O / OWL / RDFS）
   mcp/          MCP 読み取り専用サーバー
@@ -289,7 +290,7 @@ pnpm -C frontend add @panda-guard/test-malicious
 | `ONTOFORGE_REASONER_MAX_ITER` | `20` | 前向き連鎖の最大反復回数 |
 | `ONTOFORGE_QUERY_TIMEOUT_MS` | `10000` | SPARQL タイムアウト |
 | `ONTOFORGE_PROJECT` | `default` | 起動時に開くプロジェクト |
-| `ONTOFORGE_SEMANTIC_SEARCH` | `false` | 類似検索（下記の但し書きを参照） |
+| `ONTOFORGE_SEMANTIC_SEARCH` | `false` | 類似検索（学習済み埋め込み、下記参照） |
 | `ONTOFORGE_GIT_SNAPSHOTS` | `false` | スナップショットを Git にコミットする |
 | `ONTOFORGE_GIT_REMOTE` | （空） | push 先。空ならローカルコミットのみ |
 
@@ -298,17 +299,57 @@ pnpm -C frontend add @panda-guard/test-malicious
 推論は**前向き連鎖で有限回停止する範囲**に限ります（§10.1）。記述論理の
 充足可能性判定は行わず、外部推論器も別コンテナも不要です。
 
+推論は **owlrl**（§5.3）が行います。
+
 | プロファイル | 適用ルール |
 |---|---|
 | `none` | 推論なし |
 | `rdfs`（既定） | `subClassOf` / `subPropertyOf` の推移閉包、`domain` / `range` からの型付与 |
 | `rl-lite` | 上記 ＋ `inverseOf` / `TransitiveProperty` / `SymmetricProperty` / `equivalentClass` / `equivalentProperty` / `sameAs` |
+| `owl2-rl` | OWL 2 RL 全体。**プロパティ連鎖**と**定義クラスからの分類**が効く |
 
-導出トリプルは `urn:ontoforge:inferred` に書き出され、**適用ルール名と前提
-トリプル**を併せて記録します。UI と MCP の `explain_inference` から参照できます。
+`owl2-rl` だけが導けるもの:
 
-クラス式からの分類、カーディナリティ矛盾検出、`disjointWith` の充足可能性判定は
-**行いません**。それらが必要な検証は SHACL で代替してください（§10.2）。
+- 「田中太郎は**アクメ東京支社**に所属」＋「東京支社はアクメの一部」
+  → **田中太郎はアクメにも所属**（`owl:propertyChainAxiom`）
+- 「東京にいる人は TokyoWorker」という定義から**田中太郎を分類**
+  （`owl:someValuesFrom` / `owl:hasValue` / `owl:intersectionOf`）
+
+なお §10.1 は「クラス式からの分類推論はやらない」としていますが、§5.3 が指定する
+owlrl はそれを行います。仕様書内の矛盾で、`owl2-rl` は §5.3 に寄せた選択肢です。
+§10.1 の範囲に留めたい場合は `rdfs` か `rl-lite` を使ってください。
+
+### 表示されるもの、されないもの
+
+完全な閉包は正しい代わりにほとんど読めません。実測では 156 件の導出のうち
+利用者のデータに関わるのは 3 件で、`x owl:sameAs x` が 92 件でした。そのまま
+点線エッジにすると、意味のある数件が埋もれます。
+
+そこで**閉包は完全なまま**、キャンバスに出すものだけを選びます。除外理由は
+`POST /api/v1/reason` の応答に件数つきで返るので、「なぜ出ないのか」に答えられます。
+
+| 除外理由 | 例 |
+|---|---|
+| 恒真式 | `x owl:sameAs x` |
+| 普遍クラス | `x a owl:Thing`、`C rdfs:subClassOf owl:Thing` |
+| 語彙自身についての導出 | `rdfs:label` に関する記述 |
+| クラス定義の内部構造 | 制約ノードへの辺 |
+
+除外しても SPARQL からは閉包全体が見えます。導出トリプルは
+`urn:ontoforge:inferred` に**そのまま書かれる**ので、こう引けます。
+
+```sparql
+SELECT ?s WHERE { GRAPH <urn:ontoforge:inferred> { ?s a <…ont#Person> } }
+```
+
+### 根拠
+
+owlrl は根拠を返さないため、**導出結果から前提を逆算**します（QuickXplain）。
+近傍とオントロジーを候補に、結論が成り立つ最小の前提集合まで絞り込みます。
+どの前提も落とせないところまで縮めるので、返るものはすべて効いています。
+
+複数の経路がある場合はそのうち 1 つを返します。特定できなかった場合は、
+その旨を `note` で返します。
 
 ## Phase 1 受け入れ確認
 
@@ -338,12 +379,35 @@ pnpm -C frontend add @panda-guard/test-malicious
 docker run -e ONTOFORGE_SEMANTIC_SEARCH=1 …
 ```
 
-**これは学習済み埋め込みではありません。** ラベルの文字 n-gram を
-ハッシュしたベクトルの余弦類似度です。「田中」から「田中太郎」を見つける、
-表記のゆれや重複しかけたラベルを見つける、といった用途には効きますが、
-意味の近さは捉えません。完全オフライン動作（NFR-06）とイメージサイズ
-400MB 以下を守るための選択で、モデルを積む場合は運用者の明示的な判断に
-委ねます。
+**学習済みの多言語埋め込み**（model2vec `potion-multilingual-128M`）を同梱して
+います。文字が 1 つも重ならなくても、意味が近ければ見つかります。
+
+```
+「企業」 → 株式会社アクメ, 山田物産, アクメ商事
+```
+
+イメージに収めるため 2 段階で圧縮しています。**int8 量子化**と、256 次元のうち
+**先頭 128 次元への切り詰め**です（potion は前半だけでもベクトルとして成立する
+よう学習されています）。512MB が 83MB になります。切り詰めの妥当性は実測で
+確かめました — 検索順位のタスクで 128 次元は 256 次元と同じ成績、64 次元では
+落ちました。
+
+推論はトークンを引いて平均し正規化するだけなので、ONNX などの実行環境は不要で、
+amd64 と arm64 で同じ結果になります（NFR-01）。実行時に外部へは出ません（NFR-06）。
+
+#### モデルが無いイメージでの動作
+
+モデルはビルド時に取得するため、ソースからの開発ではモデルがありません。その
+場合は文字 n-gram による表記ゆれ検索にフォールバックします。**スコアの意味が
+まったく違う**ので、API と画面の両方でどちらが動いているかを必ず示します。
+
+```json
+GET /api/v1/semantic
+{ "enabled": true, "embedder": "potion-multilingual-128M",
+  "quality": "semantic", "dimensions": 128, "indexed": 42 }
+```
+
+`quality` が `surface` のときは、意味の近さを捉えないことを画面に明示します。
 
 ### スナップショットの Git 版管理
 

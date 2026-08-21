@@ -57,12 +57,18 @@ export interface HistoryPage {
   can_redo: boolean;
 }
 
+export interface SuppressedReason {
+  reason: string;
+  count: number;
+  explanation: string;
+}
+
 export interface ReasonSummary {
   profile: string;
   derived: number;
-  iterations: number;
-  reachedFixedPoint: boolean;
-  hitDerivationCap: boolean;
+  /** Entailed, but not worth drawing. Reported so "why is that missing?" has an answer. */
+  suppressed: number;
+  suppressedByReason: SuppressedReason[];
 }
 
 export interface ReasonerRule {
@@ -75,10 +81,23 @@ export interface ReasonerProfiles {
   profiles: { name: string; rules: ReasonerRule[] }[];
 }
 
+/** Whether a premise states something, or is part of how a definition is written. */
+export type PremiseKind = 'fact' | 'definition';
+
+export interface Premise {
+  subject: string;
+  predicate: string;
+  object: string;
+  kind: PremiseKind;
+  text: string;
+}
+
 export interface Explanation {
-  triple: { subject: string; predicate: string; object: string; text: string };
+  triple: Premise;
   rule: string;
-  premises: { subject: string; predicate: string; object: string; text: string }[];
+  premises: Premise[];
+  /** Set when the reason could not be pinned down, saying why. */
+  note?: string;
 }
 
 export interface ValidationFinding {
@@ -182,7 +201,12 @@ export interface ProjectList {
 export interface SemanticStatus {
   enabled: boolean;
   indexed: number;
+  /** Which embedder is in use; a score means different things for each. */
+  embedder: string;
+  quality: 'semantic' | 'surface';
+  dimensions: number;
   note: string;
+  hint?: string;
 }
 
 export interface SemanticHit {

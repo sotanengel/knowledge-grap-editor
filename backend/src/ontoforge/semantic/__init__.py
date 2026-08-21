@@ -1,5 +1,26 @@
-"""Optional local vector search (§14 Phase 3). Off unless switched on."""
+"""Optional similar-label search (§14 Phase 3). Off unless switched on."""
 
-from ontoforge.semantic.vectors import DIMENSIONS, Similar, VectorIndex, cosine, embed
+from ontoforge.semantic.embedder import (
+    Embedder,
+    HashingEmbedder,
+    StaticEmbedder,
+    cosine,
+    default_model_dir,
+    describe,
+    load_embedder,
+    model_is_available,
+)
+from ontoforge.semantic.vectors import Similar, VectorIndex
 
-__all__ = ["DIMENSIONS", "Similar", "VectorIndex", "cosine", "embed"]
+__all__ = [
+    "Embedder",
+    "HashingEmbedder",
+    "Similar",
+    "StaticEmbedder",
+    "VectorIndex",
+    "cosine",
+    "default_model_dir",
+    "describe",
+    "load_embedder",
+    "model_is_available",
+]

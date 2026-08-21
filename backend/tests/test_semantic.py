@@ -4,49 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from ontoforge.semantic.vectors import VectorIndex, cosine, embed, ngrams, normalise
+from ontoforge.semantic.embedder import HashingEmbedder
+from ontoforge.semantic.vectors import VectorIndex
 
 
 @pytest.fixture
 def index(tmp_path: Path) -> VectorIndex:
-    with VectorIndex(tmp_path / "index") as opened:
+    with VectorIndex(tmp_path / "index", embedder=HashingEmbedder()) as opened:
         yield opened
-
-
-# ---------------------------------------------------------------- vectors
-
-
-def test_normalisation_folds_width_and_case() -> None:
-    assert normalise("ＡＢＣ") == "abc"
-    assert normalise("  a   b  ") == "a b"
-
-
-def test_ngrams_cover_short_strings_too() -> None:
-    assert ngrams("a") == ["a", "a"]
-    assert "田中" in ngrams("田中太郎")
-
-
-def test_a_vector_is_unit_length() -> None:
-    vector = embed("田中太郎")
-    assert abs(sum(value * value for value in vector) - 1.0) < 1e-6
-
-
-def test_an_empty_string_gives_a_zero_vector() -> None:
-    assert not any(embed("   "))
-
-
-def test_the_same_text_always_gives_the_same_vector() -> None:
-    # A salted hash would make the index unusable across restarts.
-    assert embed("田中太郎") == embed("田中太郎")
-
-
-def test_similar_text_scores_higher_than_unrelated_text() -> None:
-    target = embed("田中太郎")
-    assert cosine(target, embed("田中太一")) > cosine(target, embed("株式会社アクメ"))
-
-
-def test_identical_text_scores_one() -> None:
-    assert cosine(embed("acme"), embed("ACME")) == pytest.approx(1.0, abs=1e-6)
 
 
 # ---------------------------------------------------------------- index
@@ -90,9 +55,9 @@ def test_replace_all_rebuilds_in_one_go(index: VectorIndex) -> None:
 
 
 def test_the_index_survives_a_reopen(tmp_path: Path) -> None:
-    with VectorIndex(tmp_path / "index") as first:
+    with VectorIndex(tmp_path / "index", embedder=HashingEmbedder()) as first:
         first.upsert("iri:1", "田中太郎")
-    with VectorIndex(tmp_path / "index") as second:
+    with VectorIndex(tmp_path / "index", embedder=HashingEmbedder()) as second:
         assert [hit.iri for hit in second.search("田中")] == ["iri:1"]
 
 
@@ -105,3 +70,115 @@ def test_the_limit_is_honoured(index: VectorIndex) -> None:
     for n in range(20):
         index.upsert(f"iri:{n}", f"田中{n}")
     assert len(index.search("田中", limit=5)) == 5
+
+
+# ---------------------------------------------------------------- the embedder behind it
+
+
+def test_the_index_records_which_embedder_filled_it(tmp_path: Path) -> None:
+    from ontoforge.semantic.embedder import HashingEmbedder
+
+    with VectorIndex(tmp_path / "index", embedder=HashingEmbedder()) as index:
+        assert index.embedder.quality == "surface"
+        assert index.dimensions == index.embedder.dimensions
+
+
+def test_changing_the_embedder_rebuilds_rather_than_mixing_vectors(tmp_path: Path) -> None:
+    """Vectors from two different embedders are not comparable at all.
+
+    Keeping them side by side would produce silent nonsense, so a change empties
+    the index and the runtime refills it.
+    """
+    from ontoforge.semantic.embedder import HashingEmbedder
+
+    directory = tmp_path / "index"
+    with VectorIndex(directory, embedder=HashingEmbedder(dimensions=512)) as first:
+        first.upsert("iri:1", "田中太郎")
+        assert first.count() == 1
+
+    with VectorIndex(directory, embedder=HashingEmbedder(dimensions=256)) as second:
+        assert second.stale
+        assert second.count() == 0
+
+
+def test_the_same_embedder_keeps_the_index(tmp_path: Path) -> None:
+    from ontoforge.semantic.embedder import HashingEmbedder
+
+    directory = tmp_path / "index"
+    with VectorIndex(directory, embedder=HashingEmbedder()) as first:
+        first.upsert("iri:1", "田中太郎")
+    with VectorIndex(directory, embedder=HashingEmbedder()) as second:
+        assert not second.stale
+        assert [hit.iri for hit in second.search("田中")] == ["iri:1"]
+
+
+@pytest.mark.skipif(
+    not __import__(
+        "ontoforge.semantic.embedder", fromlist=["model_is_available"]
+    ).model_is_available(
+        __import__(
+            "ontoforge.semantic.embedder", fromlist=["default_model_dir"]
+        ).default_model_dir()
+    ),
+    reason="the embedding model is fetched at build time",
+)
+def test_with_the_model_a_search_finds_what_shares_no_character(tmp_path: Path) -> None:
+    """The whole point: 「企業」 finds 「株式会社アクメ」.
+
+    Not one character is shared, so the surface fallback scores this at zero.
+    """
+    from ontoforge.semantic.embedder import StaticEmbedder, default_model_dir
+
+    with VectorIndex(tmp_path / "index", embedder=StaticEmbedder(default_model_dir())) as index:
+        index.replace_all(
+            [
+                ("iri:acme", "株式会社アクメ"),
+                ("iri:alice", "田中太郎"),
+                ("iri:apple", "りんご"),
+            ]
+        )
+        top = index.search("企業", limit=3)
+        assert top[0].iri == "iri:acme", top
+        assert top[0].score > 0
+
+
+def test_the_runtime_refills_the_index_when_the_embedder_changes(tmp_path: Path) -> None:
+    """Swapping the embedder must not leave the index empty or stale.
+
+    The vectors of two embedders are not comparable, so the index is emptied --
+    and the store, which is the authority, refills it on the next start. Without
+    that, search would silently return nothing after an upgrade.
+    """
+    from pyoxigraph import Literal, NamedNode, Quad
+
+    from ontoforge.config import Settings
+    from ontoforge.namespaces import RDFS_LABEL
+    from ontoforge.runtime import Runtime
+    from ontoforge.semantic.embedder import HashingEmbedder
+    from ontoforge.semantic.vectors import VectorIndex
+    from ontoforge.store import graphs
+
+    settings = Settings(data_dir=tmp_path / "data", semantic_search=True)
+    with Runtime.create(settings) as runtime:
+        runtime.write(
+            additions=[
+                Quad(
+                    NamedNode("https://example.org/kg/id/a"),
+                    RDFS_LABEL,
+                    Literal("株式会社アクメ", language="ja"),
+                    graphs.DATA,
+                )
+            ]
+        )
+        assert runtime.vectors is not None
+        assert runtime.vectors.count() == 1
+
+    # A different embedder empties the index...
+    with VectorIndex(settings.index_dir, embedder=HashingEmbedder(dimensions=64)) as swapped:
+        assert swapped.count() == 0
+
+    # ...and the next start fills it again from the store.
+    with Runtime.create(settings) as reopened:
+        assert reopened.vectors is not None
+        assert reopened.vectors.count() == 1
+        assert reopened.search.count() == 1

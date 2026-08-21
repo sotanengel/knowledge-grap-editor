@@ -12,6 +12,7 @@ dependencies = [
     "pyshacl>=0.30",
     "pydantic>=2.9",
     "python-multipart>=0.0.20",
+    "tokenizers>=0.21",
     "python-ulid>=3.0",
     "pyyaml>=6.0",
     "uvicorn[standard]>=0.32",
@@ -29,6 +30,10 @@ dev = [
     "mypy>=1.13",
     "pre-commit>=3.8",
     "ruff>=0.8",
+    # Build-time only: reading the published weights, and checking the reader
+    # that replaces it agrees with it. Neither is in the runtime image.
+    "numpy>=2.1",
+    "safetensors>=0.4",
     "types-pyyaml>=6.0",
 ]
 
@@ -75,7 +80,7 @@ packages = ["ontoforge"]
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["pyoxigraph.*"]
+module = ["pyoxigraph.*", "owlrl.*", "pyshacl.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

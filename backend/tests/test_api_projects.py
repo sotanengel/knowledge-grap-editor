@@ -126,8 +126,11 @@ def test_a_project_survives_a_restart(data_dir: Path) -> None:
 def test_semantic_search_is_off_unless_asked_for(client: TestClient) -> None:
     payload = client.get("/api/v1/semantic").json()
     assert payload["enabled"] is False
-    # The tool says what the feature is, rather than implying it understands meaning.
-    assert "学習済み埋め込みではない" in payload["note"]
+    # Even while off, it says which embedder this image carries, so the operator
+    # knows what turning it on would give them.
+    assert payload["quality"] in {"semantic", "surface"}
+    assert payload["note"]
+    assert "ONTOFORGE_SEMANTIC_SEARCH=1" in payload["hint"]
 
 
 def test_using_semantic_search_while_it_is_off_is_a_409(client: TestClient) -> None:
@@ -140,10 +143,50 @@ def test_semantic_search_finds_a_near_label_when_enabled(data_dir: Path) -> None
         client.post("/api/v1/entities", json={"label": "田中太郎"})
         client.post("/api/v1/entities", json={"label": "株式会社アクメ"})
 
-        assert client.get("/api/v1/semantic").json()["enabled"] is True
+        status = client.get("/api/v1/semantic").json()
+        assert status["enabled"] is True
+        assert status["dimensions"] > 0
         results = client.get("/api/v1/semantic/search", params={"q": "田中"}).json()["results"]
         assert results[0]["label"] == "田中太郎"
         assert 0 < results[0]["score"] <= 1
+
+
+def test_the_status_says_which_kind_of_similarity_is_in_use(data_dir: Path) -> None:
+    """A score means something quite different depending on the embedder, so
+    which one produced it is never left implicit."""
+    from ontoforge.semantic.embedder import default_model_dir, model_is_available
+
+    with client_for(Settings(data_dir=data_dir, semantic_search=True)) as client:
+        status = client.get("/api/v1/semantic").json()
+        expected = "semantic" if model_is_available(default_model_dir()) else "surface"
+        assert status["quality"] == expected
+        assert status["embedder"]
+
+
+@pytest.mark.skipif(
+    not __import__(
+        "ontoforge.semantic.embedder", fromlist=["model_is_available"]
+    ).model_is_available(
+        __import__(
+            "ontoforge.semantic.embedder", fromlist=["default_model_dir"]
+        ).default_model_dir()
+    ),
+    reason="the embedding model is fetched at build time",
+)
+def test_a_search_finds_a_node_that_shares_no_character_with_the_query(
+    data_dir: Path,
+) -> None:
+    """「企業」 finds 「株式会社アクメ」. Not one character is shared, so the
+    surface fallback would score this at zero -- this is the whole point of
+    carrying a trained embedding."""
+    with client_for(Settings(data_dir=data_dir, semantic_search=True)) as client:
+        client.post("/api/v1/entities", json={"label": "株式会社アクメ"})
+        client.post("/api/v1/entities", json={"label": "田中太郎"})
+        client.post("/api/v1/entities", json={"label": "りんご"})
+
+        results = client.get("/api/v1/semantic/search", params={"q": "企業"}).json()["results"]
+        assert results, results
+        assert results[0]["label"] == "株式会社アクメ", results
 
 
 def test_the_vector_index_can_be_rebuilt(data_dir: Path) -> None:

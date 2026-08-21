@@ -62,7 +62,8 @@ export function Header({ onOpenPanel }: { onOpenPanel: (tab: string) => void }) 
             const summary = await api.reason();
             await refresh();
             onOpenPanel('turtle');
-            return `推論: ${summary.derived} 件を導出（${summary.profile}）`;
+            const held = summary.suppressed > 0 ? `、${summary.suppressed} 件は表示を省略` : '';
+            return `推論: ${summary.derived} 件を導出（${summary.profile}）${held}`;
           })
         }
         className="rounded-md border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600"

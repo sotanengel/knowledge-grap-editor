@@ -8,6 +8,8 @@ frontend/*.tsbuildinfo
 data
 docs
 scripts
+# …except the one the build stage runs to fetch the embedding model.
+!scripts/fetch_embedding_model.py
 **/__pycache__
 **/.pytest_cache
 **/.mypy_cache

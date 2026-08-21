@@ -16,6 +16,7 @@ from ontoforge.gitsync.repo import (
 )
 from ontoforge.projects.store import ProjectExistsError, ProjectNotFoundError
 from ontoforge.runtime import Runtime
+from ontoforge.semantic.embedder import describe, load_embedder
 
 router = APIRouter(tags=["projects"])
 
@@ -83,15 +84,21 @@ def delete_project(project_id: str, request: Request) -> dict[str, Any]:
 
 @router.get("/semantic")
 def semantic_status(runtime: RuntimeDep) -> dict[str, Any]:
-    """Whether vector search is on, and what it can and cannot do."""
+    """Whether similar-label search is on, and -- more to the point -- which
+    kind of similarity it is measuring."""
+    if runtime.vectors is None:
+        # Report what *would* be used, so the operator can tell before switching
+        # it on whether this image carries the model or only the fallback.
+        return {
+            "enabled": False,
+            "indexed": 0,
+            **describe(load_embedder()),
+            "hint": "ONTOFORGE_SEMANTIC_SEARCH=1 で有効になります。",
+        }
     return {
-        "enabled": runtime.vectors is not None,
-        "indexed": runtime.vectors.count() if runtime.vectors else 0,
-        "note": (
-            "ラベルの文字 n-gram による類似検索です。学習済み埋め込みではないため、"
-            "表記のゆれや部分一致には強い一方、意味の近さは捉えません。"
-            "ONTOFORGE_SEMANTIC_SEARCH=1 で有効になります。"
-        ),
+        "enabled": True,
+        "indexed": runtime.vectors.count(),
+        **describe(runtime.vectors.embedder),
     }
 
 

@@ -45,6 +45,24 @@ RUN --mount=type=secret,id=takumi_guard_token,required=false \
     fi && \
     uv sync --frozen --no-dev
 
+# The embedding model ships inside the image so that similar-label search works
+# with the network unplugged (NFR-06). 512MB of float32 is compressed to about
+# 83MB here -- int8, and 128 of its 256 dimensions, which measured as well as
+# the full width on a ranking task.
+#
+# A failure stops the build: falling back silently would leave the image
+# measuring surface similarity while claiming to measure meaning. Pass
+# --allow-missing to build the fallback-only image on purpose.
+# numpy and safetensors read the published weights and are needed for nothing
+# else, so they are brought in for this one command. Keeping numpy out of the
+# runtime image saves 68MB -- the matrix is read directly at run time
+# (ontoforge/semantic/npy.py).
+COPY scripts/fetch_embedding_model.py ./scripts/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv run --no-sync --with numpy --with safetensors \
+      python scripts/fetch_embedding_model.py \
+      --out backend/src/ontoforge/semantic/model
+
 
 # ---------------------------------------------------------------- runtime
 FROM python:3.12-slim AS runtime
