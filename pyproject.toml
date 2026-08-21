@@ -1,0 +1,72 @@
+[project]
+name = "ontoforge"
+version = "0.1.0"
+description = "OntoForge - ontology / knowledge graph authoring tool with read-only MCP access"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { file = "LICENSE" }
+dependencies = [
+    "pyoxigraph>=0.5.9",
+    "pydantic>=2.9",
+    "python-ulid>=3.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "mypy>=1.13",
+    "pre-commit>=3.8",
+    "ruff>=0.8",
+    "types-pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/src/ontoforge"]
+
+# Takumi Guard (Shisho) - PyPI security proxy.
+# The token is NOT stored here. Supply it per-developer / per-CI with:
+#   export UV_INDEX_TAKUMI_GUARD_USERNAME=token
+#   export UV_INDEX_TAKUMI_GUARD_PASSWORD=tg_anon_xxxxxxxx
+# Without credentials the index still works in anonymous mode and blocked
+# packages are still rejected with 403.
+[[tool.uv.index]]
+name = "takumi-guard"
+url = "https://pypi.flatt.tech/simple/"
+default = true
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["backend/src", "backend/tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN", "PTH"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/*" = ["ANN"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "backend/src"
+packages = ["ontoforge"]
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["pyoxigraph.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend/src"]
+addopts = "-q"
