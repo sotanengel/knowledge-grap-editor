@@ -373,9 +373,13 @@ async def test_explain_inference_names_the_rule_and_premises(graph: ReadOnlyGrap
             object=PERSON.value,
         )
     ).structured
-    assert result["rule"] == "rdfs:subClassOf-type"
-    assert len(result["premises"]) == 2
+    # Alice is a Person twice over: she is an Employee, and `worksFor` has
+    # Person as its domain. Either route is a complete answer, so what matters
+    # is that the premises are real and the step is named.
+    assert result["rule"] in {"rdfs:subClassOf-type", "rdfs:domain"}
+    assert result["premises"]
     assert "田中太郎" in result["triple"]["text"]
+    assert all(premise["text"] for premise in result["premises"])
 
 
 @pytest.mark.anyio

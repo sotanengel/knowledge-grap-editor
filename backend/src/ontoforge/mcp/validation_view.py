@@ -10,8 +10,9 @@ from typing import TYPE_CHECKING, Any
 
 from pyoxigraph import NamedNode
 
+from ontoforge.rdflib_bridge import to_rdflib as _to_rdflib
 from ontoforge.store import graphs
-from ontoforge.validation.service import _findings_from, _to_rdflib
+from ontoforge.validation.service import _findings_from
 
 if TYPE_CHECKING:  # pragma: no cover
     from ontoforge.mcp.readonly import ReadOnlyGraph

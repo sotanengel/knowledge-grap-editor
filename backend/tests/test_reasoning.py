@@ -271,3 +271,106 @@ def test_the_none_profile_leaves_the_inferred_graph_empty(
     service.run()
     service.run(profile="none")
     assert runtime.store.count(graphs.INFERRED) == 0
+
+
+# ---------------------------------------------------------------- regressions
+
+
+def test_derived_triples_are_visible_to_sparql(service: ReasonerService, runtime: Runtime) -> None:
+    """§10.1 chose materialisation so SPARQL pays nothing at query time.
+
+    The inferred graph used to hold only provenance records, so a query against
+    it came back empty and the whole point was lost.
+    """
+    service.run(profile="rdfs")
+    query = f"SELECT ?s WHERE {{ GRAPH <{graphs.INFERRED.value}> {{ ?s a <{PERSON.value}> }} }}"
+    rows = list(runtime.store.query(query))
+    assert [str(row["s"]) for row in rows] == [f"<{ALICE.value}>"]
+
+
+def test_a_defined_class_does_not_leave_a_constraint_node_on_the_canvas(
+    runtime: Runtime,
+) -> None:
+    """The old rules asserted `TokyoWorker subClassOf <skolem>`, drawn as a
+    meaningless dashed edge."""
+    from ontoforge.io.service import ImportExportService
+
+    ImportExportService(runtime).import_rdf(
+        """
+        @prefix ont: <https://example.org/kg/ont#> .
+        @prefix id:  <https://example.org/kg/id/> .
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        ont:TokyoWorker owl:equivalentClass [ a owl:Restriction ;
+            owl:onProperty ont:city ; owl:hasValue id:tokyo ] .
+        id:alice ont:city id:tokyo .
+        """,
+        filename="defined.ttl",
+        graph=graphs.ONTOLOGY,
+    )
+    reasoner = ReasonerService(runtime)
+    reasoner.run(profile="owl2-rl")
+
+    derived = reasoner.derived_triples()
+    skolem = f"{runtime.settings.base_iri}.well-known/genid/"
+    assert not any(
+        str(getattr(triple.object, "value", "")).startswith(skolem)
+        or str(getattr(triple.subject, "value", "")).startswith(skolem)
+        for triple in derived
+    )
+    # The classification itself is exactly what should survive.
+    assert t(ALICE, RDF_TYPE, NamedNode(f"{ONT}TokyoWorker")) in derived
+
+
+def test_owl2_rl_reaches_through_a_property_chain(runtime: Runtime) -> None:
+    from ontoforge.io.service import ImportExportService
+
+    ImportExportService(runtime).import_rdf(
+        """
+        @prefix ont: <https://example.org/kg/ont#> .
+        @prefix id:  <https://example.org/kg/id/> .
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        ont:worksFor owl:propertyChainAxiom ( ont:worksFor ont:partOf ) .
+        id:alice ont:worksFor id:acmeTokyo .
+        id:acmeTokyo ont:partOf id:acme .
+        """,
+        filename="chain.ttl",
+        graph=graphs.ONTOLOGY,
+    )
+    reasoner = ReasonerService(runtime)
+    reasoner.run(profile="owl2-rl")
+    assert (
+        t(ALICE, NamedNode(f"{ONT}worksFor"), NamedNode(f"{ID}acme")) in reasoner.derived_triples()
+    )
+
+
+def test_the_noise_tally_says_what_was_held_back(service: ReasonerService) -> None:
+    summary = service.run(profile="owl2-rl")
+    assert summary.suppressed >= 0
+    assert isinstance(summary.suppressed_by_reason, list)
+
+
+def test_an_explanation_comes_back_for_an_owl_derivation(runtime: Runtime) -> None:
+    from ontoforge.io.service import ImportExportService
+
+    ImportExportService(runtime).import_rdf(
+        """
+        @prefix ont: <https://example.org/kg/ont#> .
+        @prefix id:  <https://example.org/kg/id/> .
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        ont:worksFor owl:propertyChainAxiom ( ont:worksFor ont:partOf ) .
+        id:alice ont:worksFor id:acmeTokyo .
+        id:acmeTokyo ont:partOf id:acme .
+        """,
+        filename="chain.ttl",
+        graph=graphs.ONTOLOGY,
+    )
+    reasoner = ReasonerService(runtime)
+    reasoner.run(profile="owl2-rl")
+
+    conclusion = t(ALICE, NamedNode(f"{ONT}worksFor"), NamedNode(f"{ID}acme"))
+    explanation = reasoner.explain(conclusion)
+    assert explanation is not None
+    # Both steps of the chain must be in the reason.
+    text = " ".join(premise["text"] for premise in explanation.premises)
+    assert "acmeTokyo" in text
+    assert "partOf" in text

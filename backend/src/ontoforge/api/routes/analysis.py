@@ -34,9 +34,10 @@ def run_reasoner(body: ReasonRequest, runtime: RuntimeDep) -> dict[str, Any]:
     return {
         "profile": summary.profile,
         "derived": summary.derived,
-        "iterations": summary.iterations,
-        "reachedFixedPoint": summary.reached_fixed_point,
-        "hitDerivationCap": summary.hit_derivation_cap,
+        # What the closure produced but the canvas will not show, and why. Said
+        # out loud so "why is that not there?" has an answer (§10.1).
+        "suppressed": summary.suppressed,
+        "suppressedByReason": summary.suppressed_by_reason,
     }
 
 
@@ -65,7 +66,12 @@ def explain(body: ExplainRequest, runtime: RuntimeDep) -> dict[str, Any]:
             status.HTTP_404_NOT_FOUND,
             "that triple was not derived; it is asserted directly or absent",
         )
-    return {"triple": found.triple, "rule": found.rule, "premises": found.premises}
+    return {
+        "triple": found.triple,
+        "rule": found.rule,
+        "premises": found.premises,
+        "note": found.note,
+    }
 
 
 # ---------------------------------------------------------------------- validation

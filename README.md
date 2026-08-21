@@ -298,17 +298,57 @@ pnpm -C frontend add @panda-guard/test-malicious
 推論は**前向き連鎖で有限回停止する範囲**に限ります（§10.1）。記述論理の
 充足可能性判定は行わず、外部推論器も別コンテナも不要です。
 
+推論は **owlrl**（§5.3）が行います。
+
 | プロファイル | 適用ルール |
 |---|---|
 | `none` | 推論なし |
 | `rdfs`（既定） | `subClassOf` / `subPropertyOf` の推移閉包、`domain` / `range` からの型付与 |
 | `rl-lite` | 上記 ＋ `inverseOf` / `TransitiveProperty` / `SymmetricProperty` / `equivalentClass` / `equivalentProperty` / `sameAs` |
+| `owl2-rl` | OWL 2 RL 全体。**プロパティ連鎖**と**定義クラスからの分類**が効く |
 
-導出トリプルは `urn:ontoforge:inferred` に書き出され、**適用ルール名と前提
-トリプル**を併せて記録します。UI と MCP の `explain_inference` から参照できます。
+`owl2-rl` だけが導けるもの:
 
-クラス式からの分類、カーディナリティ矛盾検出、`disjointWith` の充足可能性判定は
-**行いません**。それらが必要な検証は SHACL で代替してください（§10.2）。
+- 「田中太郎は**アクメ東京支社**に所属」＋「東京支社はアクメの一部」
+  → **田中太郎はアクメにも所属**（`owl:propertyChainAxiom`）
+- 「東京にいる人は TokyoWorker」という定義から**田中太郎を分類**
+  （`owl:someValuesFrom` / `owl:hasValue` / `owl:intersectionOf`）
+
+なお §10.1 は「クラス式からの分類推論はやらない」としていますが、§5.3 が指定する
+owlrl はそれを行います。仕様書内の矛盾で、`owl2-rl` は §5.3 に寄せた選択肢です。
+§10.1 の範囲に留めたい場合は `rdfs` か `rl-lite` を使ってください。
+
+### 表示されるもの、されないもの
+
+完全な閉包は正しい代わりにほとんど読めません。実測では 156 件の導出のうち
+利用者のデータに関わるのは 3 件で、`x owl:sameAs x` が 92 件でした。そのまま
+点線エッジにすると、意味のある数件が埋もれます。
+
+そこで**閉包は完全なまま**、キャンバスに出すものだけを選びます。除外理由は
+`POST /api/v1/reason` の応答に件数つきで返るので、「なぜ出ないのか」に答えられます。
+
+| 除外理由 | 例 |
+|---|---|
+| 恒真式 | `x owl:sameAs x` |
+| 普遍クラス | `x a owl:Thing`、`C rdfs:subClassOf owl:Thing` |
+| 語彙自身についての導出 | `rdfs:label` に関する記述 |
+| クラス定義の内部構造 | 制約ノードへの辺 |
+
+除外しても SPARQL からは閉包全体が見えます。導出トリプルは
+`urn:ontoforge:inferred` に**そのまま書かれる**ので、こう引けます。
+
+```sparql
+SELECT ?s WHERE { GRAPH <urn:ontoforge:inferred> { ?s a <…ont#Person> } }
+```
+
+### 根拠
+
+owlrl は根拠を返さないため、**導出結果から前提を逆算**します（QuickXplain）。
+近傍とオントロジーを候補に、結論が成り立つ最小の前提集合まで絞り込みます。
+どの前提も落とせないところまで縮めるので、返るものはすべて効いています。
+
+複数の経路がある場合はそのうち 1 つを返します。特定できなかった場合は、
+その旨を `note` で返します。
 
 ## Phase 1 受け入れ確認
 

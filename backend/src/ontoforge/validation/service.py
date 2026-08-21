@@ -15,12 +15,13 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from pyoxigraph import DefaultGraph, NamedNode, Quad, RdfFormat, Triple, serialize
+from pyoxigraph import NamedNode, Quad
 from rdflib import Graph as RdflibGraph
 
 from ontoforge.io.graphview import local_name
 from ontoforge.jsonld import label_of
 from ontoforge.namespaces import SH
+from ontoforge.rdflib_bridge import to_rdflib as _to_rdflib
 from ontoforge.runtime import Runtime
 from ontoforge.store import graphs
 from ontoforge.validation.shapes import ShapeSpec, shape_iri, to_quads
@@ -218,23 +219,3 @@ def _suggest(constraint: str, focus_label: str, path: str | None, value: str | N
             return f"「{subject}」に、この種類では認められていない「{path}」が付いています。"
         case _:
             return f"「{subject}」を見直してください。"
-
-
-def _to_rdflib(quads: Any) -> RdflibGraph:
-    """Hand quads to rdflib as N-Triples, which is the cheapest bridge available.
-
-    Quads carrying an RDF 1.2 triple term are left out: rdflib cannot parse
-    ``<<( ... )>>``, and SHACL has nothing to say about a reified statement
-    anyway. In practice these are the reasoner's provenance records and the
-    edge-metadata reifiers, neither of which is data to validate.
-    """
-    flattened = [
-        Quad(q.subject, q.predicate, q.object, DefaultGraph())
-        for q in quads
-        if not isinstance(q.subject, Triple) and not isinstance(q.object, Triple)
-    ]
-    payload = serialize(flattened, format=RdfFormat.N_TRIPLES)
-    text = payload.decode("utf-8") if isinstance(payload, bytes) else str(payload)
-    graph = RdflibGraph()
-    graph.parse(data=text, format="nt")
-    return graph

@@ -39,9 +39,23 @@ def client(runtime: Runtime) -> Iterator[TestClient]:
 
 def test_reasoning_reports_what_it_derived(client: TestClient) -> None:
     payload = client.post("/api/v1/reason", json={}).json()
-    assert payload["derived"] == 1
+    assert payload["derived"] >= 1
     assert payload["profile"] == "rdfs"
-    assert payload["reachedFixedPoint"] is True
+
+
+def test_reasoning_says_what_it_held_back_and_why(client: TestClient) -> None:
+    # The closure is far larger than what belongs on a canvas, so "why is that
+    # not shown?" needs an answer (§10.1).
+    payload = client.post("/api/v1/reason", json={"profile": "owl2-rl"}).json()
+    assert payload["suppressed"] > 0
+    reasons = {entry["reason"] for entry in payload["suppressedByReason"]}
+    assert reasons
+    assert all(entry["explanation"] for entry in payload["suppressedByReason"])
+
+
+def test_owl2_rl_is_offered_as_a_profile(client: TestClient) -> None:
+    names = {entry["name"] for entry in client.get("/api/v1/reason/profiles").json()["profiles"]}
+    assert names == {"none", "rdfs", "rl-lite", "owl2-rl"}
 
 
 def test_the_profile_can_be_chosen_per_run(client: TestClient) -> None:
@@ -67,8 +81,11 @@ def test_a_derived_triple_can_be_explained(client: TestClient) -> None:
         "/api/v1/reason/explain",
         json={"subject": ALICE.value, "predicate": RDF_TYPE.value, "object": PERSON.value},
     ).json()
-    assert payload["rule"] == "rdfs:subClassOf-type"
-    assert len(payload["premises"]) == 2
+    assert payload["premises"], payload
+    # The premises must be the ones that actually carry the conclusion.
+    text = " ".join(premise["text"] for premise in payload["premises"])
+    assert "Employee" in text
+    assert payload["rule"]
 
 
 def test_explaining_an_asserted_triple_is_a_404(client: TestClient) -> None:

@@ -20,7 +20,7 @@ CONFIG_FILENAME = "config.yaml"
 DEFAULT_DATA_DIR = "/data"
 DEFAULT_BASE_IRI = "https://example.org/kg/"
 
-ReasonerProfile = Literal["none", "rdfs", "rl-lite"]
+ReasonerProfile = Literal["none", "rdfs", "rl-lite", "owl2-rl"]
 
 
 class Settings(BaseModel):

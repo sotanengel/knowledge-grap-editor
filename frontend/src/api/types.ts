@@ -57,12 +57,18 @@ export interface HistoryPage {
   can_redo: boolean;
 }
 
+export interface SuppressedReason {
+  reason: string;
+  count: number;
+  explanation: string;
+}
+
 export interface ReasonSummary {
   profile: string;
   derived: number;
-  iterations: number;
-  reachedFixedPoint: boolean;
-  hitDerivationCap: boolean;
+  /** Entailed, but not worth drawing. Reported so "why is that missing?" has an answer. */
+  suppressed: number;
+  suppressedByReason: SuppressedReason[];
 }
 
 export interface ReasonerRule {
@@ -79,6 +85,8 @@ export interface Explanation {
   triple: { subject: string; predicate: string; object: string; text: string };
   rule: string;
   premises: { subject: string; predicate: string; object: string; text: string }[];
+  /** Set when the reason could not be pinned down, saying why. */
+  note?: string;
 }
 
 export interface ValidationFinding {
