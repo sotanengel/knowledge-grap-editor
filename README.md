@@ -31,9 +31,10 @@ backend/src/ontoforge/
   io/           インポート／エクスポート（RDF・CSV・GraphML・Mermaid）
   rdfstar.py    RDF 1.2 三重項によるエッジ属性
   projects/     複数のグラフ空間（FR-14）
-  semantic/     ローカル類似検索（既定オフ）
+  semantic/     類似検索。同梱の学習済み埋め込み、無ければ文字 n-gram
   gitsync/      スナップショットの Git 版管理
-  reasoning/    ルールベース推論（none / rdfs / rl-lite）＋導出根拠
+  reasoning/    owlrl による推論、ノイズ除去、根拠の逆算
+  rdflib_bridge.py  pyoxigraph ⇄ rdflib（SHACL と推論で共有）
   validation/   SHACL シェイプ生成と pySHACL 検証
   vocab/        同梱語彙（schema.org / SKOS / FOAF / DCTERMS / PROV-O / OWL / RDFS）
   mcp/          MCP 読み取り専用サーバー
@@ -289,7 +290,7 @@ pnpm -C frontend add @panda-guard/test-malicious
 | `ONTOFORGE_REASONER_MAX_ITER` | `20` | 前向き連鎖の最大反復回数 |
 | `ONTOFORGE_QUERY_TIMEOUT_MS` | `10000` | SPARQL タイムアウト |
 | `ONTOFORGE_PROJECT` | `default` | 起動時に開くプロジェクト |
-| `ONTOFORGE_SEMANTIC_SEARCH` | `false` | 類似検索（下記の但し書きを参照） |
+| `ONTOFORGE_SEMANTIC_SEARCH` | `false` | 類似検索（学習済み埋め込み、下記参照） |
 | `ONTOFORGE_GIT_SNAPSHOTS` | `false` | スナップショットを Git にコミットする |
 | `ONTOFORGE_GIT_REMOTE` | （空） | push 先。空ならローカルコミットのみ |
 
@@ -378,12 +379,35 @@ owlrl は根拠を返さないため、**導出結果から前提を逆算**し�
 docker run -e ONTOFORGE_SEMANTIC_SEARCH=1 …
 ```
 
-**これは学習済み埋め込みではありません。** ラベルの文字 n-gram を
-ハッシュしたベクトルの余弦類似度です。「田中」から「田中太郎」を見つける、
-表記のゆれや重複しかけたラベルを見つける、といった用途には効きますが、
-意味の近さは捉えません。完全オフライン動作（NFR-06）とイメージサイズ
-400MB 以下を守るための選択で、モデルを積む場合は運用者の明示的な判断に
-委ねます。
+**学習済みの多言語埋め込み**（model2vec `potion-multilingual-128M`）を同梱して
+います。文字が 1 つも重ならなくても、意味が近ければ見つかります。
+
+```
+「企業」 → 株式会社アクメ, 山田物産, アクメ商事
+```
+
+イメージに収めるため 2 段階で圧縮しています。**int8 量子化**と、256 次元のうち
+**先頭 128 次元への切り詰め**です（potion は前半だけでもベクトルとして成立する
+よう学習されています）。512MB が 83MB になります。切り詰めの妥当性は実測で
+確かめました — 検索順位のタスクで 128 次元は 256 次元と同じ成績、64 次元では
+落ちました。
+
+推論はトークンを引いて平均し正規化するだけなので、ONNX などの実行環境は不要で、
+amd64 と arm64 で同じ結果になります（NFR-01）。実行時に外部へは出ません（NFR-06）。
+
+#### モデルが無いイメージでの動作
+
+モデルはビルド時に取得するため、ソースからの開発ではモデルがありません。その
+場合は文字 n-gram による表記ゆれ検索にフォールバックします。**スコアの意味が
+まったく違う**ので、API と画面の両方でどちらが動いているかを必ず示します。
+
+```json
+GET /api/v1/semantic
+{ "enabled": true, "embedder": "potion-multilingual-128M",
+  "quality": "semantic", "dimensions": 128, "indexed": 42 }
+```
+
+`quality` が `surface` のときは、意味の近さを捉えないことを画面に明示します。
 
 ### スナップショットの Git 版管理
 

@@ -16,6 +16,9 @@ frontend/dist/
 frontend/.vite/
 frontend/*.tsbuildinfo
 
+# Fetched at build time, never committed (about 64MB).
+backend/src/ontoforge/semantic/model/
+
 # OntoForge runtime data
 /data/
 

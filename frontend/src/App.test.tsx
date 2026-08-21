@@ -97,7 +97,15 @@ beforeEach(() => {
         );
       if (url.includes('/semantic'))
         return Promise.resolve(
-          jsonResponse({ enabled: false, indexed: 0, note: '学習済み埋め込みではないため…' }),
+          jsonResponse({
+            enabled: false,
+            indexed: 0,
+            embedder: 'character-ngram (512d)',
+            quality: 'surface',
+            dimensions: 512,
+            note: '学習済み埋め込みではないため、意味の近さは捉えません。',
+            hint: 'ONTOFORGE_SEMANTIC_SEARCH=1 で有効になります。',
+          }),
         );
       return Promise.resolve(jsonResponse({}));
     }),
@@ -177,11 +185,13 @@ describe('Phase 3 additions', () => {
     expect(screen.getByText(/履歴・元に戻す操作がまとめて入れ替わります/)).toBeInTheDocument();
   });
 
-  it('says plainly that similar-label search is off and what it is', async () => {
+  it('says which embedder the image carries before it is switched on', async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('tab', { name: '類似検索' }));
     expect(await screen.findByText('類似検索は既定で無効です。')).toBeInTheDocument();
+    // A score means different things per embedder, so which one is never implicit.
+    expect(screen.getByText('character-ngram (512d)')).toBeInTheDocument();
     expect(screen.getByText(/学習済み埋め込みではない/)).toBeInTheDocument();
   });
 });

@@ -190,7 +190,12 @@ export interface ProjectList {
 export interface SemanticStatus {
   enabled: boolean;
   indexed: number;
+  /** Which embedder is in use; a score means different things for each. */
+  embedder: string;
+  quality: 'semantic' | 'surface';
+  dimensions: number;
   note: string;
+  hint?: string;
 }
 
 export interface SemanticHit {

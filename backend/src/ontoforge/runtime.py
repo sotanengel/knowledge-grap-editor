@@ -27,6 +27,7 @@ from ontoforge.jsonld import Context, build_context, label_of
 from ontoforge.namespaces import RDF_TYPE, RDFS_COMMENT
 from ontoforge.projects.store import ProjectStore
 from ontoforge.search.fts import Kind, SearchIndex, SearchRecord
+from ontoforge.semantic.embedder import load_embedder
 from ontoforge.semantic.vectors import VectorIndex
 from ontoforge.store import graphs
 from ontoforge.store.iri import IriMinter
@@ -99,12 +100,20 @@ class Runtime:
             search=SearchIndex(settings.index_dir),
             minter=IriMinter(settings.base_iri),
             policy=SnapshotPolicy(every_ops=DEFAULT_SNAPSHOT_EVERY_OPS),
-            vectors=VectorIndex(settings.index_dir) if settings.semantic_search else None,
+            vectors=(
+                VectorIndex(settings.index_dir, embedder=load_embedder())
+                if settings.semantic_search
+                else None
+            ),
             git=(SnapshotRepository(settings.snapshots_dir) if settings.git_snapshots else None),
         )
-        # The full-text index is a derived cache: a schema bump empties it, and
-        # the store is the authority, so refill it rather than serve nothing.
-        if runtime.search.stale and runtime.store.count() > 0:
+        # Both indexes are derived caches. A schema bump empties the full-text
+        # one, and a change of embedder empties the vector one; the store is the
+        # authority either way, so refill rather than serve nothing.
+        needs_refill = runtime.search.stale or (
+            runtime.vectors is not None and runtime.vectors.stale
+        )
+        if needs_refill and runtime.store.count() > 0:
             runtime.reindex_all()
         return runtime
 
