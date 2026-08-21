@@ -16,7 +16,9 @@ from ontoforge.io.graphview import local_name
 from ontoforge.namespaces import ONTF, RDF_REIFIES
 from ontoforge.reasoning.closure import entails as closure_entails
 from ontoforge.reasoning.justify import CLOSURE_STEP, justify
+from ontoforge.reasoning.noise import is_construction, premise_kind
 from ontoforge.reasoning.rules import Profile
+from ontoforge.reasoning.service import ANONYMOUS
 from ontoforge.store import graphs
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -28,7 +30,13 @@ MAX_CANDIDATES = 400
 
 
 def _readable(graph: ReadOnlyGraph, triple: Triple) -> dict[str, str]:
+    base = graph.settings.base_iri
+
     def name(term: object) -> str:
+        if is_construction(term, base_iri=base):
+            # A restriction or list node. Its identifier says nothing an agent
+            # can use, and printing it drowns the premises that do.
+            return ANONYMOUS
         if isinstance(term, NamedNode):
             label = graph.label_for(term)
             return f"{label} <{term.value}>" if label else f"<{term.value}>"
@@ -36,11 +44,20 @@ def _readable(graph: ReadOnlyGraph, triple: Triple) -> dict[str, str]:
             return f'"{term.value}"'
         return str(term)
 
+    predicate = (
+        ANONYMOUS
+        if is_construction(triple.predicate, base_iri=base)
+        # ``str`` wraps the IRI in angle brackets, which would leave a stray ">"
+        # on the name once it is split.
+        else local_name(getattr(triple.predicate, "value", str(triple.predicate)))
+    )
+
     return {
         "subject": str(triple.subject),
         "predicate": str(triple.predicate),
         "object": str(triple.object),
-        "text": f"{name(triple.subject)} {local_name(str(triple.predicate))} {name(triple.object)}",
+        "kind": premise_kind(triple, base_iri=base),
+        "text": f"{name(triple.subject)} {predicate} {name(triple.object)}",
     }
 
 
@@ -67,6 +84,18 @@ def _candidates(graph: ReadOnlyGraph, triple: Triple) -> list[Triple]:
             found[Triple(quad.subject, quad.predicate, quad.object)] = None
         for quad in graph.store.quads_for_pattern(None, None, end, graphs.DATA):
             found[Triple(quad.subject, quad.predicate, quad.object)] = None
+
+    # What is said about the properties in play is often the reason itself: a
+    # chain axiom hangs off the predicate and mentions neither end, so gathering
+    # only the two ends leaves every chained conclusion unexplained. The depth
+    # follows the RDF list such an axiom is written as.
+    properties = {triple.predicate} | {
+        candidate.predicate for candidate in found if isinstance(candidate.predicate, NamedNode)
+    }
+    for prop in properties:
+        for quad in graph.store.describe(prop, depth=3, search=[graphs.DATA]):
+            found[Triple(quad.subject, quad.predicate, quad.object)] = None
+
     return list(found)
 
 

@@ -10,7 +10,6 @@ dependencies = [
     "mcp>=2.0",
     "pyoxigraph>=0.5.9",
     "pyshacl>=0.30",
-    "numpy>=2.1",
     "pydantic>=2.9",
     "python-multipart>=0.0.20",
     "tokenizers>=0.21",
@@ -31,6 +30,9 @@ dev = [
     "mypy>=1.13",
     "pre-commit>=3.8",
     "ruff>=0.8",
+    # Build-time only: reading the published weights, and checking the reader
+    # that replaces it agrees with it. Neither is in the runtime image.
+    "numpy>=2.1",
     "safetensors>=0.4",
     "types-pyyaml>=6.0",
 ]

@@ -18,7 +18,14 @@ from ontoforge.namespaces import (
     RDFS_SUBCLASS_OF,
     RDFS_SUBPROPERTY_OF,
 )
-from ontoforge.reasoning.noise import NoiseReason, is_noise, keep_signal, noise_reason
+from ontoforge.reasoning.noise import (
+    NoiseReason,
+    is_noise,
+    keep_signal,
+    noise_reason,
+    premise_kind,
+)
+from ontoforge.store.iri import SKOLEM_SUFFIX
 
 BASE = "https://example.org/kg/"
 ONT = f"{BASE}ont#"
@@ -34,6 +41,15 @@ EQUIVALENT_PROPERTY = NamedNode(f"{OWL}equivalentProperty")
 OWL_THING = NamedNode(f"{OWL}Thing")
 RDFS_RESOURCE = NamedNode(f"{RDFS}Resource")
 SKOLEM = NamedNode(f"{BASE}.well-known/genid/b0")
+AGENT = NamedNode(f"{ONT}Agent")
+ACME = NamedNode(f"{ID}acme")
+OWL_CLASS = NamedNode(f"{OWL}Class")
+CHAIN = NamedNode(f"{OWL}propertyChainAxiom")
+RDF_FIRST = NamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+
+
+def t(subject: NamedNode, predicate: NamedNode, obj: NamedNode) -> Triple:
+    return Triple(subject, predicate, obj)
 
 
 def check(triple: Triple) -> bool:
@@ -154,3 +170,27 @@ def test_keep_signal_leaves_a_clean_set_alone() -> None:
 
 def test_a_literal_object_is_not_mistaken_for_a_node() -> None:
     assert not check(Triple(ALICE, RDFS_LABEL, Literal("田中太郎", language="ja")))
+
+
+# ---------------------------------------------------------------- premise kinds
+
+
+def test_a_statement_about_an_individual_is_a_fact() -> None:
+    assert premise_kind(t(ALICE, WORKS_FOR, ACME), base_iri=BASE) == "fact"
+    assert premise_kind(t(ALICE, RDF_TYPE, PERSON), base_iri=BASE) == "fact"
+
+
+def test_the_shape_of_a_vocabulary_is_a_definition() -> None:
+    assert premise_kind(t(PERSON, RDFS_SUBCLASS_OF, AGENT), base_iri=BASE) == "definition"
+    assert premise_kind(t(PERSON, RDF_TYPE, OWL_CLASS), base_iri=BASE) == "definition"
+
+
+def test_a_skolemised_list_node_is_a_definition() -> None:
+    node = NamedNode(f"{BASE}{SKOLEM_SUFFIX}abc123")
+    assert premise_kind(t(WORKS_FOR, CHAIN, node), base_iri=BASE) == "definition"
+    assert premise_kind(t(node, RDF_FIRST, WORKS_FOR), base_iri=BASE) == "definition"
+
+
+def test_without_a_base_iri_no_node_is_taken_for_a_skolem() -> None:
+    node = NamedNode(f"{BASE}{SKOLEM_SUFFIX}abc123")
+    assert premise_kind(t(ALICE, WORKS_FOR, node), base_iri="") == "fact"

@@ -35,7 +35,13 @@ from ontoforge.namespaces import ONTF, RDF_REIFIES
 from ontoforge.reasoning.closure import entails as closure_entails
 from ontoforge.reasoning.closure import owl_closure
 from ontoforge.reasoning.justify import CLOSURE_STEP, justify
-from ontoforge.reasoning.noise import NoiseReason, keep_signal, summarise_removed
+from ontoforge.reasoning.noise import (
+    NoiseReason,
+    is_construction,
+    keep_signal,
+    premise_kind,
+    summarise_removed,
+)
 from ontoforge.reasoning.rules import Profile
 from ontoforge.runtime import Runtime
 from ontoforge.store import graphs
@@ -210,10 +216,11 @@ class ReasonerService:
         if not self.is_derived(triple):
             return None
 
+        base = self.runtime.settings.base_iri
         candidates = self._candidates(triple)
         if len(candidates) > MAX_EXPLANATION_CANDIDATES:
             return Explanation(
-                triple=_triple_json(triple),
+                triple=_triple_json(triple, base_iri=base),
                 rule=CLOSURE_STEP,
                 premises=[],
                 note=(
@@ -230,7 +237,7 @@ class ReasonerService:
         found = justify(triple, candidates, entails, profile=profile)
         if found is None:
             return Explanation(
-                triple=_triple_json(triple),
+                triple=_triple_json(triple, base_iri=base),
                 rule=CLOSURE_STEP,
                 premises=[],
                 note=(
@@ -240,18 +247,19 @@ class ReasonerService:
             )
 
         return Explanation(
-            triple=_triple_json(triple),
+            triple=_triple_json(triple, base_iri=base),
             rule=found.rule,
-            premises=[_triple_json(premise) for premise in found.premises],
+            premises=[_triple_json(premise, base_iri=base) for premise in found.premises],
             note="" if found.rule != CLOSURE_STEP else "OWL 2 RL の閉包規則によるものです。",
         )
 
     def _candidates(self, triple: Triple) -> list[Triple]:
         """What could plausibly account for ``triple``.
 
-        The neighbourhood of both ends plus the whole ontology. Loaded
-        vocabularies are left out on purpose: schema.org alone is 18,000 triples,
-        and searching it would make the answer arrive far too late to be useful.
+        The neighbourhood of both ends, what is said about the predicates
+        involved, and the whole ontology. Loaded vocabularies are left out on
+        purpose: schema.org alone is 18,000 triples, and searching it would make
+        the answer arrive far too late to be useful.
         """
         found: dict[Triple, None] = {}
 
@@ -267,7 +275,27 @@ class ReasonerService:
             for quad in self.runtime.store.quads_for_pattern(None, None, end, graphs.DATA):
                 found[Triple(quad.subject, quad.predicate, quad.object)] = None
 
+        self._add_property_axioms(triple, found)
         return list(found)
+
+    def _add_property_axioms(self, triple: Triple, found: dict[Triple, None]) -> None:
+        """What is said about the properties in play -- which is often the reason.
+
+        ``rdfs:domain``, ``owl:propertyChainAxiom``, ``owl:TransitiveProperty``
+        and their kin hang off the *predicate*, so a search that gathers only the
+        subject and object of the conclusion cannot see them. A chain axiom in
+        particular mentions neither end, which left every chained conclusion
+        reported as an unexplained closure step.
+
+        Predicates are few even in a large graph, and the depth follows the RDF
+        list a chain axiom is written as, so this stays cheap.
+        """
+        properties = {triple.predicate} | {
+            candidate.predicate for candidate in found if isinstance(candidate.predicate, NamedNode)
+        }
+        for prop in properties:
+            for quad in self.runtime.store.describe(prop, depth=3, search=[graphs.DATA]):
+                found[Triple(quad.subject, quad.predicate, quad.object)] = None
 
 
 def _record_node(triple: Triple) -> NamedNode:
@@ -276,17 +304,36 @@ def _record_node(triple: Triple) -> NamedNode:
     return NamedNode(f"urn:ontoforge:{DERIVATION_PREFIX}{digest}")
 
 
-def _triple_json(triple: Triple) -> dict[str, str]:
+#: How a skolemised node reads once it is no longer an opaque identifier.
+ANONYMOUS = "（定義）"
+
+
+def _triple_json(triple: Triple, *, base_iri: str = "") -> dict[str, str]:
+    """One triple in the shape the API and the MCP tool return.
+
+    ``kind`` separates what someone asserted from the structure of a definition;
+    :func:`~ontoforge.reasoning.noise.premise_kind` decides which, so the REST
+    answer and the MCP answer never disagree about it.
+    """
     from ontoforge.io.graphview import local_name
+
+    def readable(term: object) -> str:
+        # ``str`` on a node wraps it in angle brackets, which then survive the
+        # split and leave a stray ">" on every name. The value is the IRI itself.
+        value = getattr(term, "value", None)
+        if not isinstance(value, str):
+            return str(term)
+        if is_construction(term, base_iri=base_iri):
+            return ANONYMOUS
+        return local_name(value)
 
     return {
         "subject": str(triple.subject),
         "predicate": str(triple.predicate),
         "object": str(triple.object),
+        "kind": premise_kind(triple, base_iri=base_iri),
         "text": (
-            f"{local_name(str(triple.subject))} "
-            f"{local_name(str(triple.predicate))} "
-            f"{local_name(str(triple.object))}"
+            f"{readable(triple.subject)} {readable(triple.predicate)} {readable(triple.object)}"
         ),
     }
 

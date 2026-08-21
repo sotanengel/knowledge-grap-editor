@@ -16,8 +16,10 @@ surface that reports a similarity says which one produced it, so nobody reads
 more into a score than is there.
 
 Inference for the static model is a lookup, a mean and a normalise; that is all
-model2vec does at run time. Doing it here keeps the runtime dependencies to
-numpy and tokenizers, and keeps the behaviour identical on amd64 and arm64.
+model2vec does at run time. Doing it here keeps the runtime dependency to
+``tokenizers`` alone -- the matrix is read straight off disk
+(:mod:`ontoforge.semantic.npy`) -- and keeps the behaviour identical on amd64
+and arm64.
 """
 
 from __future__ import annotations
@@ -138,23 +140,32 @@ class StaticEmbedder:
     note = SEMANTIC_NOTE
 
     def __init__(self, directory: Path | str) -> None:
-        import numpy as np
         from tokenizers import Tokenizer
+
+        from ontoforge.semantic.npy import Int8Matrix
 
         self.directory = Path(directory)
         if not model_is_available(self.directory):
             raise FileNotFoundError(f"no embedding model at {self.directory}")
 
         meta = json.loads((self.directory / "meta.json").read_text(encoding="utf-8"))
-        self._matrix = np.load(self.directory / "embeddings.i8.npy")
+        self._matrix = Int8Matrix(self.directory / "embeddings.i8.npy")
         self._scale = float(meta["scale"])
         self._tokenizer = Tokenizer.from_file(str(self.directory / "tokenizer.json"))
         self.dimensions = int(meta["dimensions"])
         self.name = str(meta.get("name", "potion-multilingual-128M"))
 
-    def embed(self, text: str) -> list[float]:
-        import numpy as np
+        if self._matrix.shape[1] != self.dimensions:
+            self._matrix.close()
+            raise ValueError(
+                f"the model says {self.dimensions} dimensions but the matrix has "
+                f"{self._matrix.shape[1]}"
+            )
 
+    def close(self) -> None:
+        self._matrix.close()
+
+    def embed(self, text: str) -> list[float]:
         cleaned = normalise(text)
         if not cleaned:
             return [0.0] * self.dimensions
@@ -163,11 +174,8 @@ class StaticEmbedder:
         if not ids:
             return [0.0] * self.dimensions
 
-        rows = self._matrix[ids].astype(np.float32).mean(axis=0) * self._scale
-        length = float(np.linalg.norm(rows))
-        if length == 0.0:
-            return [0.0] * self.dimensions
-        return [float(value) for value in rows / length]
+        # The scale cancels out of the normalisation, so it is not applied.
+        return _unit(self._matrix.mean(ids))
 
 
 # ---------------------------------------------------------------------- choosing

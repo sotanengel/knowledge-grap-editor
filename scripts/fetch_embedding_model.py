@@ -16,9 +16,10 @@ So it is compressed here, twice over:
 512MB becomes 64MB, and the meaning survives: 「会社」 and 「企業」 stay close
 although they share no character.
 
-Nothing here runs at request time. The result is three files the runtime reads
-with numpy and tokenizers -- no inference runtime, and identical behaviour on
-amd64 and arm64.
+Nothing here runs at request time, and numpy is not in the runtime image: the
+int8 matrix is read directly (``ontoforge.semantic.npy``), leaving ``tokenizers``
+as the only inference dependency. No inference runtime, and identical behaviour
+on amd64 and arm64.
 """
 
 from __future__ import annotations

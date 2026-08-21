@@ -10,6 +10,7 @@ import pytest
 from pyoxigraph import Literal, NamedNode, Quad
 
 from ontoforge.config import Settings
+from ontoforge.io.graphview import local_name
 from ontoforge.mcp.readonly import ReadOnlyGraph
 from ontoforge.mcp.server import create_server
 from ontoforge.namespaces import RDF_TYPE, RDFS_LABEL, RDFS_SUBCLASS_OF
@@ -380,6 +381,32 @@ async def test_explain_inference_names_the_rule_and_premises(graph: ReadOnlyGrap
     assert result["premises"]
     assert "田中太郎" in result["triple"]["text"]
     assert all(premise["text"] for premise in result["premises"])
+
+
+@pytest.mark.anyio
+async def test_explained_premises_read_cleanly(graph: ReadOnlyGraph) -> None:
+    """An agent reads this text, so it must not carry stray syntax.
+
+    Subjects and objects are deliberately given as ``label <iri>`` so the agent
+    has something to query with. The predicate is not: it was rendered by
+    splitting ``str(node)``, which is bracketed, so every predicate came out with
+    a trailing ">".
+    """
+    result = (
+        await _call(
+            graph,
+            "explain_inference",
+            subject=ALICE.value,
+            predicate=RDF_TYPE.value,
+            object=PERSON.value,
+        )
+    ).structured
+
+    assert result["premises"]
+    for premise in result["premises"]:
+        assert premise["kind"] in {"fact", "definition"}
+        rendered = local_name(premise["predicate"].strip("<>"))
+        assert f" {rendered} " in premise["text"], premise
 
 
 @pytest.mark.anyio

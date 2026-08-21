@@ -374,3 +374,75 @@ def test_an_explanation_comes_back_for_an_owl_derivation(runtime: Runtime) -> No
     text = " ".join(premise["text"] for premise in explanation.premises)
     assert "acmeTokyo" in text
     assert "partOf" in text
+
+
+def test_an_axiom_on_the_predicate_is_found_outside_the_ontology_graph(runtime: Runtime) -> None:
+    """A plain import puts schema and data in one graph; the reason must still hold.
+
+    The axiom that licenses a chain hangs off the *predicate*, which appears at
+    neither end of the conclusion. Gathering only the two ends misses it, and the
+    answer comes back as an unexplained closure step.
+    """
+    from ontoforge.io.service import ImportExportService
+
+    ImportExportService(runtime).import_rdf(
+        """
+        @prefix ont: <https://example.org/kg/ont#> .
+        @prefix id:  <https://example.org/kg/id/> .
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        ont:worksFor owl:propertyChainAxiom ( ont:worksFor ont:partOf ) .
+        id:alice ont:worksFor id:acmeTokyo .
+        id:acmeTokyo ont:partOf id:acme .
+        """,
+        filename="chain.ttl",
+        graph=graphs.DATA,
+    )
+    reasoner = ReasonerService(runtime)
+    reasoner.run(profile="owl2-rl")
+
+    explanation = reasoner.explain(t(ALICE, WORKS_FOR, NamedNode(f"{ID}acme")))
+    assert explanation is not None
+    assert explanation.premises, explanation.note
+    text = " ".join(premise["text"] for premise in explanation.premises)
+    assert "partOf" in text
+
+
+def test_a_premise_says_whether_it_is_a_fact_or_a_definition(runtime: Runtime) -> None:
+    """The plumbing of a definition should not read like something someone said.
+
+    A chain axiom is written as an RDF list, so its justification includes
+    skolemised list nodes. They belong in the answer -- the conclusion does not
+    follow without them -- but listing them beside "田中 worksFor アクメ東京" as if
+    they were the same kind of thing makes the reason unreadable.
+    """
+    from ontoforge.io.service import ImportExportService
+
+    ImportExportService(runtime).import_rdf(
+        """
+        @prefix ont: <https://example.org/kg/ont#> .
+        @prefix id:  <https://example.org/kg/id/> .
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        ont:worksFor owl:propertyChainAxiom ( ont:worksFor ont:partOf ) .
+        id:alice ont:worksFor id:acmeTokyo .
+        id:acmeTokyo ont:partOf id:acme .
+        """,
+        filename="chain.ttl",
+        graph=graphs.DATA,
+    )
+    reasoner = ReasonerService(runtime)
+    reasoner.run(profile="owl2-rl")
+
+    explanation = reasoner.explain(t(ALICE, WORKS_FOR, NamedNode(f"{ID}acme")))
+    assert explanation is not None
+
+    kinds = {premise["kind"] for premise in explanation.premises}
+    assert kinds == {"fact", "definition"}
+
+    facts = [p for p in explanation.premises if p["kind"] == "fact"]
+    assert {p["text"] for p in facts} == {
+        "alice worksFor acmeTokyo",
+        "acmeTokyo partOf acme",
+    }
+
+    # No opaque identifier survives into the readable text.
+    assert not any("genid" in premise["text"] for premise in explanation.premises)

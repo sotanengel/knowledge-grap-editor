@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from enum import StrEnum
+from typing import Literal
 
 from pyoxigraph import NamedNode, Triple
 
@@ -151,3 +152,35 @@ def _starts_with(term: object, *prefixes: str) -> bool:
     if not isinstance(term, NamedNode):
         return False
     return any(term.value.startswith(prefix) for prefix in prefixes)
+
+
+PremiseKind = Literal["fact", "definition"]
+
+
+def is_construction(term: object, *, base_iri: str) -> bool:
+    """Whether ``term`` is a skolemised restriction or list node (§4.3)."""
+    if not base_iri or not isinstance(term, NamedNode):
+        return False
+    return term.value.startswith(f"{base_iri}{SKOLEM_SUFFIX}")
+
+
+def premise_kind(triple: Triple, *, base_iri: str) -> PremiseKind:
+    """Whether a premise states something, or shapes the vocabulary.
+
+    A justification mixes the two. "田中太郎 worksFor アクメ東京" is a fact somebody
+    entered; ``ont:worksFor owl:propertyChainAxiom ( … )`` and the RDF list nodes
+    it is written as are how an axiom is spelled. Both belong in the answer --
+    the conclusion does not follow without either -- but presenting them as the
+    same kind of thing is what made an explanation hard to read.
+    """
+    if is_construction(triple.subject, base_iri=base_iri) or is_construction(
+        triple.object, base_iri=base_iri
+    ):
+        return "definition"
+
+    if triple.predicate == RDF_TYPE:
+        # "alice a Person" says something about Alice; "Person a owl:Class" is
+        # part of setting the vocabulary up.
+        return "definition" if _starts_with(triple.object, *META_NAMESPACES) else "fact"
+
+    return "definition" if _starts_with(triple.predicate, *META_NAMESPACES) else "fact"

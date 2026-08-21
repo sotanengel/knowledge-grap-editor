@@ -81,10 +81,21 @@ export interface ReasonerProfiles {
   profiles: { name: string; rules: ReasonerRule[] }[];
 }
 
+/** Whether a premise states something, or is part of how a definition is written. */
+export type PremiseKind = 'fact' | 'definition';
+
+export interface Premise {
+  subject: string;
+  predicate: string;
+  object: string;
+  kind: PremiseKind;
+  text: string;
+}
+
 export interface Explanation {
-  triple: { subject: string; predicate: string; object: string; text: string };
+  triple: Premise;
   rule: string;
-  premises: { subject: string; predicate: string; object: string; text: string }[];
+  premises: Premise[];
   /** Set when the reason could not be pinned down, saying why. */
   note?: string;
 }
