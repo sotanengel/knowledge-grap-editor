@@ -66,6 +66,26 @@ class RenameTerm(_Body):
     label: str
 
 
+class ReasonRequest(_Body):
+    """``POST /reason``: which profile to run, defaulting to the configured one."""
+
+    profile: str | None = None
+
+
+class ExplainRequest(_Body):
+    """``POST /reason/explain``: the derived triple to account for."""
+
+    subject: str
+    predicate: str
+    object: str
+
+
+class LoadVocabularies(_Body):
+    """``POST /vocabularies``: which bundled vocabularies to load."""
+
+    names: list[str] = Field(default_factory=list)
+
+
 class DeleteResult(BaseModel):
     removed: int
 

@@ -30,12 +30,34 @@ backend/src/ontoforge/
   sparql/       読み取り専用ガード
   io/           インポート／エクスポート（RDF・CSV・GraphML・Mermaid）
   rdfstar.py    RDF 1.2 三重項によるエッジ属性
-  api/          FastAPI（REST・SPARQL・SSE）
+  reasoning/    ルールベース推論（none / rdfs / rl-lite）＋導出根拠
+  validation/   SHACL シェイプ生成と pySHACL 検証
+  vocab/        同梱語彙（schema.org / SKOS / FOAF / DCTERMS / PROV-O / OWL / RDFS）
+  mcp/          MCP 読み取り専用サーバー
+  api/          FastAPI（REST・SPARQL・SSE・/mcp）
 frontend/       React 18 + TypeScript + Vite + Tailwind CSS
 docs/           設計書
 ```
 
 ## 起動
+
+### Docker（推奨）
+
+```bash
+docker run -d --name ontoforge -p 8080:8080 -v "$(pwd)/data:/data" ghcr.io/sotanengel/knowledge-grap-editor:latest
+```
+
+- UI: `http://localhost:8080`
+- MCP エンドポイント: `http://localhost:8080/mcp`
+
+コンテナは**非 root** で動作し、書き込み可能なのは `/data` のみです。
+読み取り専用ルートファイルシステムで動かす場合:
+
+```bash
+docker run -d --name ontoforge -p 127.0.0.1:8080:8080 --read-only --tmpfs /tmp -v "$(pwd)/data:/data" ghcr.io/sotanengel/knowledge-grap-editor:latest
+```
+
+### ソースから
 
 ```bash
 uv run ontoforge serve
@@ -43,6 +65,65 @@ uv run ontoforge serve
 
 既定で `127.0.0.1:8080` にのみバインドします。LAN へ公開する場合は
 `--host` を明示し、あわせて `ONTOFORGE_AUTH_TOKEN` を設定してください。
+
+同梱語彙の読み込み:
+
+```bash
+uv run ontoforge load-vocab
+```
+
+## MCP（AI からの参照）
+
+**MCP は完全な読み取り専用です。** 更新系ツールは存在せず、ストアは書き込みを
+拒否し、SPARQL は実行前にパースして更新句を弾きます（三重防御、P4）。
+
+### Streamable HTTP
+
+```json
+{
+  "mcpServers": {
+    "ontoforge": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+`/mcp` は**読み取り専用のハンドル**で開いたストアを見ます。stdio は別プロセス
+なので pyoxigraph の `Store.read_only` をそのまま使い、同一プロセスの HTTP
+マウントは（生きた DB に 2 本目のハンドルを開くのが未定義動作のため）同じ
+ハンドルを読み取り専用ラッパー越しに共有します。どちらも書き込みは届きません。
+
+### stdio
+
+```json
+{
+  "mcpServers": {
+    "ontoforge": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "./data:/data", "ghcr.io/sotanengel/knowledge-grap-editor:latest", "mcp-stdio"]
+    }
+  }
+}
+```
+
+| ツール | 内容 |
+|---|---|
+| `search_entities` | ラベル全文検索 |
+| `get_entity` | CBD を Turtle で（IRI にラベル併記） |
+| `list_classes` | クラス階層とインスタンス数 |
+| `list_properties` | プロパティ一覧（定義域・値域つき） |
+| `describe_ontology` | オントロジー全体の自然言語サマリ |
+| `get_neighbors` | 近傍サブグラフ |
+| `find_path` | ノード間の最短経路 |
+| `sparql_select` | SELECT / ASK / CONSTRUCT / DESCRIBE のみ |
+| `validate_graph` | SHACL 検証結果 |
+| `explain_inference` | 導出トリプルの根拠（適用ルールと前提） |
+
+Resources は `ontoforge://ontology/schema.ttl` / `summary.md` / `graphs` /
+`examples/queries.md`、Prompts は `explore_entity` / `build_sparql` /
+`extract_to_kg` を公開します。
 
 ## API
 
@@ -66,6 +147,13 @@ uv run ontoforge serve
 | `GET` | `/api/v1/export?format=&graphs=` | 上記 RDF 各形式 + GraphML / CSV / Mermaid |
 | `GET/PUT/DELETE` | `/api/v1/mappings/{name}` | CSV マッピングの保存と再利用 |
 | `GET` | `/api/v1/history` / `POST /history/undo` / `redo` | 変更履歴と取り消し |
+| `POST` | `/api/v1/reason` | 推論を実行し `inferred` グラフを再構築 |
+| `GET` | `/api/v1/reason/profiles` | `none` / `rdfs` / `rl-lite` と適用ルール |
+| `POST` | `/api/v1/reason/explain` | 導出トリプルの根拠 |
+| `POST` | `/api/v1/validate` | SHACL 検証。違反ごとに修正候補を返す |
+| `GET/PUT/DELETE` | `/api/v1/shapes/{name}` | SHACL シェイプの管理 |
+| `GET/POST` | `/api/v1/vocabularies` | 同梱語彙の一覧と読み込み |
+| `POST` | `/mcp` | MCP Streamable HTTP（**読み取り専用**） |
 | `GET` | `/api/v1/events` | SSE。変更を他クライアントへプッシュ |
 
 対話的なドキュメントは起動後 `http://127.0.0.1:8080/docs` にあります。
@@ -155,6 +243,37 @@ pnpm -C frontend add @panda-guard/test-malicious
 | `ONTOFORGE_REASONER` | `rdfs` | `none` / `rdfs` / `rl-lite` |
 | `ONTOFORGE_REASONER_MAX_ITER` | `20` | 前向き連鎖の最大反復回数 |
 | `ONTOFORGE_QUERY_TIMEOUT_MS` | `10000` | SPARQL タイムアウト |
+
+## 推論と検証
+
+推論は**前向き連鎖で有限回停止する範囲**に限ります（§10.1）。記述論理の
+充足可能性判定は行わず、外部推論器も別コンテナも不要です。
+
+| プロファイル | 適用ルール |
+|---|---|
+| `none` | 推論なし |
+| `rdfs`（既定） | `subClassOf` / `subPropertyOf` の推移閉包、`domain` / `range` からの型付与 |
+| `rl-lite` | 上記 ＋ `inverseOf` / `TransitiveProperty` / `SymmetricProperty` / `equivalentClass` / `equivalentProperty` / `sameAs` |
+
+導出トリプルは `urn:ontoforge:inferred` に書き出され、**適用ルール名と前提
+トリプル**を併せて記録します。UI と MCP の `explain_inference` から参照できます。
+
+クラス式からの分類、カーディナリティ矛盾検出、`disjointWith` の充足可能性判定は
+**行いません**。それらが必要な検証は SHACL で代替してください（§10.2）。
+
+## Phase 1 受け入れ確認
+
+```bash
+./scripts/e2e_phase1.sh
+```
+
+空の状態から 50 ノードの KG を作り、Turtle で出力し、MCP から `search_entities`
+と `sparql_select` で参照でき、`INSERT` が拒否されることを確認します。
+
+## バックアップ
+
+`/data` をコピーすれば完結します。`snapshots/*.trig` は単体で可搬な完全ダンプ
+なので、Git リポジトリに置いて差分管理する運用を推奨します。
 
 ## ライセンス
 

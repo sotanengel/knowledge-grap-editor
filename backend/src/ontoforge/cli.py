@@ -29,6 +29,12 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--reload", action="store_true", help="reload on source changes")
 
     subcommands.add_parser("info", help="print the resolved configuration")
+    subcommands.add_parser(
+        "mcp-stdio", help="run the read-only MCP server over stdio for a local AI client"
+    )
+
+    load = subcommands.add_parser("load-vocab", help="load bundled vocabularies into the store")
+    load.add_argument("names", nargs="*", help="vocabulary names (default: the usual set)")
     return parser
 
 
@@ -40,6 +46,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         for field in Settings.model_fields:
             value = "<set>" if field == "auth_token" and settings.auth_token else None
             print(f"{field}: {value or getattr(settings, field)}")
+        return 0
+
+    if arguments.command == "mcp-stdio":
+        from ontoforge.mcp.server import run_stdio
+
+        run_stdio(load_settings())
+        return 0
+
+    if arguments.command == "load-vocab":
+        from ontoforge.runtime import Runtime
+        from ontoforge.vocab import loader
+
+        with Runtime.create(load_settings()) as runtime:
+            names = arguments.names or list(loader.DEFAULT_VOCABULARIES)
+            for name, count in loader.load(runtime.store, names).items():
+                print(f"{name}: {count} triples")
         return 0
 
     import uvicorn
