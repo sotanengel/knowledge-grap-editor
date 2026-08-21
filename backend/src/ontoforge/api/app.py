@@ -14,15 +14,25 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from ontoforge import __version__
 from ontoforge.api.deps import RuntimeDep, require_auth
-from ontoforge.api.routes import entities, events, history, ontology, sparql, transfer
+from ontoforge.api.routes import (
+    analysis,
+    entities,
+    events,
+    history,
+    ontology,
+    sparql,
+    transfer,
+)
 from ontoforge.api.schemas import Health
 from ontoforge.config import Settings, load_settings
 from ontoforge.runtime import Runtime
 
 API_PREFIX = "/api/v1"
+MCP_PATH = "/mcp"
 
 TITLE = "OntoForge"
 DESCRIPTION = (
@@ -30,6 +40,30 @@ DESCRIPTION = (
     "are the read-write surface used by the UI; AI clients get a separate, "
     "strictly read-only MCP endpoint."
 )
+
+
+class TrailingSlashMiddleware:
+    """Make ``/mcp`` and ``/mcp/`` the same endpoint.
+
+    A mounted ASGI app owns ``<path>/...`` but not ``<path>`` itself, and the
+    catch-all static mount answers the bare path before Starlette gets a chance
+    to redirect. Rewriting the path here keeps the documented endpoint working
+    without a redirect for clients to follow.
+    """
+
+    def __init__(self, app: ASGIApp, *, path: str) -> None:
+        self.app = app
+        self.path = path
+        self.replacement = f"{path}/"
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path") == self.path:
+            scope = {
+                **scope,
+                "path": self.replacement,
+                "raw_path": self.replacement.encode("ascii"),
+            }
+        await self.app(scope, receive, send)
 
 
 def _health_router() -> APIRouter:
@@ -61,16 +95,19 @@ def create_app(
     one is opened for the lifetime of the process.
     """
     owns_runtime = runtime is None
+    active = runtime if runtime is not None else Runtime.create(settings or load_settings())
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        if owns_runtime:
-            app.state.runtime = Runtime.create(settings or load_settings())
-        try:
-            yield
-        finally:
-            if owns_runtime:
-                app.state.runtime.close()
+        async with contextlib.AsyncExitStack() as stack:
+            manager = getattr(app.state, "mcp_session_manager", None)
+            if manager is not None:
+                await stack.enter_async_context(manager.run())
+            try:
+                yield
+            finally:
+                if owns_runtime:
+                    active.close()
 
     app = FastAPI(
         title=TITLE,
@@ -78,8 +115,7 @@ def create_app(
         version=__version__,
         lifespan=lifespan,
     )
-    if runtime is not None:
-        app.state.runtime = runtime
+    app.state.runtime = active
 
     guarded: list[Any] = [Depends(require_auth)]
 
@@ -88,6 +124,7 @@ def create_app(
     api.include_router(entities.router)
     api.include_router(ontology.router)
     api.include_router(transfer.router)
+    api.include_router(analysis.router)
     api.include_router(history.router)
     api.include_router(events.router)
     app.include_router(api)
@@ -95,11 +132,44 @@ def create_app(
     # The SPARQL protocol fixes the path, so it sits outside /api/v1 (§5.1).
     app.include_router(sparql.router, dependencies=guarded)
 
+    _mount_mcp(app, active)
+
     resolved_static = static_dir or _bundled_static()
     if resolved_static is not None and resolved_static.is_dir():
         app.mount("/", StaticFiles(directory=resolved_static, html=True), name="ui")
 
     return app
+
+
+def _mount_mcp(app: FastAPI, runtime: Runtime) -> None:
+    """Publish the read-only MCP endpoint at ``/mcp`` (§9.1).
+
+    The tools see a read-only view: no write tool exists, and every mutating
+    call is refused at the store wrapper (P4). Note that this in-process mount
+    shares the API's handle rather than opening a second one -- pyoxigraph
+    documents a second handle on a live database as undefined behaviour. The
+    stdio transport, which runs as its own process, does get a genuine
+    ``Store.read_only`` handle; see ``ontoforge mcp-stdio``.
+    """
+    from ontoforge.mcp.readonly import ReadOnlyGraph
+    from ontoforge.mcp.server import create_server
+
+    graph = ReadOnlyGraph.sharing(runtime.store, runtime.search, runtime.settings)
+    server = create_server(graph, settings=runtime.settings)
+    app.state.mcp_graph = graph
+
+    # The sub-app routes its own root, so mounting it at /mcp puts the endpoint
+    # exactly where §12.2 says it is. Requests arrive at a bare `/mcp`, which a
+    # mount would normally answer with a redirect to `/mcp/` -- except that the
+    # static-UI mount at `/` claims the bare path first and replies 405. The
+    # middleware below rewrites the path before routing, so `/mcp` reaches the
+    # sub-app directly and no redirect is involved at all.
+    #
+    # The session manager is created lazily by streamable_http_app(), so it can
+    # only be picked up afterwards; the lifespan runs it.
+    app.mount(MCP_PATH, server.streamable_http_app(streamable_http_path="/"))
+    app.state.mcp_session_manager = server.session_manager
+    app.add_middleware(TrailingSlashMiddleware, path=MCP_PATH)
 
 
 def _bundled_static() -> Path | None:

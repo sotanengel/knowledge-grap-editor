@@ -46,10 +46,13 @@ class StoreClosedError(RuntimeError):
 class GraphStore:
     """A quad store scoped to one ``/data/store`` directory."""
 
-    def __init__(self, store: Store, *, path: Path, read_only: bool) -> None:
+    def __init__(
+        self, store: Store, *, path: Path, read_only: bool, owns_handle: bool = True
+    ) -> None:
         self._store: Store | None = store
         self._path = path
         self._read_only = read_only
+        self._owns_handle = owns_handle
 
     # ------------------------------------------------------------------ open
 
@@ -80,11 +83,26 @@ class GraphStore:
     def read_only(self) -> bool:
         return self._read_only
 
+    def read_only_view(self) -> GraphStore:
+        """A read-only wrapper over the *same* handle.
+
+        Two pyoxigraph handles on one live database are not safe -- ``Store.read_only``
+        is documented as undefined behaviour while another writer is open -- so a
+        component that must not write while sharing this process gets this instead:
+        the same handle, with every mutating method refused at the wrapper.
+
+        A genuinely separate read-only handle is what :meth:`open_read_only` is
+        for, and it is what the out-of-process MCP transport uses.
+        """
+        return GraphStore(self._raw, path=self._path, read_only=True, owns_handle=False)
+
     def close(self) -> None:
         """Release the store, and with it the on-disk lock."""
         store = self._store
         self._store = None
-        if store is not None and not self._read_only:
+        if store is None or not self._owns_handle:
+            return
+        if not self._read_only:
             store.flush()
 
     def __enter__(self) -> Self:

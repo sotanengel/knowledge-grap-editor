@@ -78,6 +78,20 @@ def test_quads_in_the_default_graph_round_trip() -> None:
     assert restored.additions == patch.additions
 
 
+def test_a_quad_carrying_an_rdf_12_triple_term_round_trips() -> None:
+    from pyoxigraph import Triple
+
+    from ontoforge.namespaces import RDF_REIFIES
+
+    reifier = NamedNode("urn:ontoforge:derivation/1")
+    edge = Triple(ALICE, LABEL, NAME)
+    patch = Patch.create(
+        seq=1, actor="reasoner", additions=[Quad(reifier, RDF_REIFIES, edge, graphs.INFERRED)]
+    )
+    (restored,) = parse_patches(serialize_patch(patch))
+    assert restored.additions == patch.additions
+
+
 def test_an_unterminated_transaction_is_rejected() -> None:
     with pytest.raises(PatchParseError, match="TC"):
         parse_patches("TX .\nA <http://a> <http://b> <http://c> .\n")

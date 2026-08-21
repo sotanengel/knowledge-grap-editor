@@ -20,7 +20,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from pyoxigraph import DefaultGraph, Quad, RdfFormat, parse
+from pyoxigraph import Quad, RdfFormat, parse, serialize
 from ulid import ULID
 
 TX_BEGIN = "TX ."
@@ -120,8 +120,8 @@ def serialize_patch(patch: Patch) -> str:
     if patch.inverse_of is not None:
         lines.append(f'{_HEADER}inverseOf "{_escape(patch.inverse_of)}" .')
     lines.append(TX_BEGIN)
-    lines.extend(f"A {_quad_line(quad)}" for quad in patch.additions)
-    lines.extend(f"D {_quad_line(quad)}" for quad in patch.deletions)
+    lines.extend(f"A {line}" for line in _quad_lines(patch.additions))
+    lines.extend(f"D {line}" for line in _quad_lines(patch.deletions))
     lines.append(TX_COMMIT)
     return "\n".join(lines) + "\n"
 
@@ -130,13 +130,18 @@ def serialize_patches(patches: Iterable[Patch]) -> str:
     return "".join(serialize_patch(patch) for patch in patches)
 
 
-def _quad_line(quad: Quad) -> str:
-    # str() on a pyoxigraph term is its N-Triples form; the graph name is
-    # omitted for the default graph, exactly as N-Quads wants it.
-    parts = [str(quad.subject), str(quad.predicate), str(quad.object)]
-    if not isinstance(quad.graph_name, DefaultGraph):
-        parts.append(str(quad.graph_name))
-    return " ".join(parts) + " ."
+def _quad_lines(quads: Sequence[Quad]) -> list[str]:
+    """One N-Quads line per quad.
+
+    The quads are handed to pyoxigraph rather than assembled from ``str()`` on
+    each term: RDF 1.2 triple terms need their ``<<( ... )>>`` delimiters, and
+    only the serialiser knows to write them.
+    """
+    if not quads:
+        return []
+    payload = serialize(list(quads), format=RdfFormat.N_QUADS)
+    text = payload.decode("utf-8") if isinstance(payload, bytes) else str(payload)
+    return [line for line in text.splitlines() if line.strip()]
 
 
 def _parse_quad(line: str, *, line_number: int) -> Quad:

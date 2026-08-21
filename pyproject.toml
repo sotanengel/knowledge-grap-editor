@@ -7,7 +7,9 @@ requires-python = ">=3.12,<3.13"
 license = { file = "LICENSE" }
 dependencies = [
     "fastapi>=0.115",
+    "mcp>=2.0",
     "pyoxigraph>=0.5.9",
+    "pyshacl>=0.30",
     "pydantic>=2.9",
     "python-multipart>=0.0.20",
     "python-ulid>=3.0",
@@ -58,7 +60,9 @@ src = ["backend/src", "backend/tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN", "PTH"]
-ignore = ["ANN401"]
+# The interface language is Japanese, so full-width punctuation in strings and
+# comments is correct typography rather than a homoglyph mistake.
+ignore = ["ANN401", "RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.per-file-ignores]
 "backend/tests/*" = ["ANN"]
