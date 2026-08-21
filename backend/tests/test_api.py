@@ -373,3 +373,18 @@ async def test_a_closed_stream_stops_receiving_events(runtime: Runtime) -> None:
 
 def test_the_event_route_is_registered(client: TestClient) -> None:
     assert "/api/v1/events" in client.app.openapi()["paths"]
+
+
+def test_listing_can_separate_instances_from_ontology_terms(client: TestClient) -> None:
+    person = _create(client, "田中太郎")
+    client.post("/api/v1/ontology/classes", json={"label": "田中商会"})
+
+    instances = client.get("/api/v1/entities", params={"q": "田中", "kind": "instance"}).json()
+    terms = client.get("/api/v1/entities", params={"q": "田中", "kind": "term"}).json()
+
+    assert [node["@id"] for node in instances["@graph"]] == [person["@id"]]
+    assert [node["@id"] for node in terms["@graph"]] == ["https://example.org/kg/ont#田中商会"]
+
+
+def test_an_unknown_kind_is_rejected(client: TestClient) -> None:
+    assert client.get("/api/v1/entities", params={"kind": "nonsense"}).status_code == 422

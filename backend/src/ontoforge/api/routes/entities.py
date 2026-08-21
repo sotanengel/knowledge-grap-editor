@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from ontoforge.api.deps import EntityDep, RuntimeDep
 from ontoforge.api.schemas import CreateEntity, DeleteResult, PatchEntity
 from ontoforge.entities import EntityNotFoundError
+from ontoforge.search.fts import Kind
 
 router = APIRouter(prefix="/entities", tags=["entities"])
 
@@ -21,11 +22,17 @@ def list_entities(
     runtime: RuntimeDep,
     q: str = "",
     type: str | None = None,
+    kind: Kind | None = None,
     limit: int = Query(default=50, ge=1, le=MAX_LIMIT),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
-    """Full-text label search, returned as a JSON-LD graph."""
-    hits = entities.search(query=q, type_iri=type, limit=limit, offset=offset)
+    """Full-text label search, returned as a JSON-LD graph.
+
+    ``kind=instance`` returns only facts and ``kind=term`` only class and
+    property definitions; without it the search spans both. The canvas asks for
+    instances, so the vocabulary does not end up drawn as data.
+    """
+    hits = entities.search(query=q, type_iri=type, kind=kind, limit=limit, offset=offset)
     return {"@context": runtime.context, "@graph": hits, "limit": limit, "offset": offset}
 
 

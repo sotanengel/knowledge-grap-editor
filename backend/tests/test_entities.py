@@ -188,3 +188,22 @@ def test_creating_without_a_label_is_rejected(service: EntityService) -> None:
 def test_rdf_type_cannot_be_smuggled_in_as_a_plain_property(service: EntityService) -> None:
     document = service.create(label="田中太郎", properties={RDF_TYPE.value: {"@id": PERSON}})
     assert document["@type"] == [PERSON]
+
+
+def test_search_can_be_limited_to_instances(service: EntityService, runtime: Runtime) -> None:
+    from ontoforge.ontology import OntologyService
+
+    created = service.create(label="田中太郎", types=[PERSON])
+    OntologyService(runtime).add_class(label="田中コーポレーション")
+
+    assert len(service.search(query="田中")) == 2
+    assert [hit["@id"] for hit in service.search(query="田中", kind="instance")] == [created["@id"]]
+
+
+def test_search_can_be_limited_to_ontology_terms(service: EntityService, runtime: Runtime) -> None:
+    from ontoforge.ontology import OntologyService
+
+    service.create(label="田中太郎", types=[PERSON])
+    term = OntologyService(runtime).add_class(label="田中コーポレーション")
+
+    assert [hit["@id"] for hit in service.search(query="田中", kind="term")] == [term["@id"]]

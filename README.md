@@ -35,7 +35,12 @@ backend/src/ontoforge/
   vocab/        同梱語彙（schema.org / SKOS / FOAF / DCTERMS / PROV-O / OWL / RDFS）
   mcp/          MCP 読み取り専用サーバー
   api/          FastAPI（REST・SPARQL・SSE・/mcp）
-frontend/       React 18 + TypeScript + Vite + Tailwind CSS
+frontend/src/
+  api/          型付き API クライアントと SSE 購読
+  i18n/         用語表記の切替（種類/項目/関係・属性 ⇄ RDF 用語）
+  lib/          JSON-LD 読み取り・キャンバス要素・Turtle 同期・CSV
+  state/        設定とグラフの共有状態
+  components/   3ペインシェル・キャンバス・インスペクタ・下部パネル
 docs/           設計書
 ```
 
@@ -125,6 +130,37 @@ Resources は `ontoforge://ontology/schema.ttl` / `summary.md` / `graphs` /
 `examples/queries.md`、Prompts は `explore_entity` / `build_sparql` /
 `extract_to_kg` を公開します。
 
+## 画面
+
+```
+┌─ ヘッダ：検索 │ 推論実行 │ 検証 │ エクスポート │ 用語表記・詳細の切替 ─────────┐
+├──────────────┬──────────────────────────────────┬────────────────────┤
+│  左：語彙     │      中央：グラフキャンバス         │  右：インスペクタ    │
+│  種類 / 関係  │      ノード追加・関係の D&D        │  名前・属性・関係     │
+│  外部語彙     │      推論は点線、違反は赤枠         │  出典・確信度         │
+├──────────────┴──────────────────────────────────┴────────────────────┤
+│ 下部：SPARQL │ Turtle ビュー │ 検証結果 │ 履歴 │ 表データを取り込む         │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+- **専門用語を画面に出しません。** 既定では「種類 / 項目 / 関係・属性」と表示し、
+  ヘッダの「専門用語表記」でクラス / インスタンス / プロパティに切り替えます。
+- **エラーは修正候補とセットで出します。** 「値域違反です」ではなく
+  「この関係の相手は『組織』である必要があります」と表示します。
+- **高度な設定は「詳細」トグルの奥**にあります（IRI 表示、出典・確信度など）。
+
+### フロントエンドの開発
+
+```bash
+pnpm -C frontend dev
+```
+
+バックエンドが既定以外のポートにいる場合は `ONTOFORGE_API` で指定します。
+
+```bash
+ONTOFORGE_API=http://127.0.0.1:8097 pnpm -C frontend dev
+```
+
 ## API
 
 すべて `/api/v1` 配下。SPARQL のみプロトコル準拠のため `/sparql` に置きます。
@@ -132,7 +168,7 @@ Resources は `ontoforge://ontology/schema.ttl` / `summary.md` / `graphs` /
 | Method | パス | 説明 |
 |---|---|---|
 | `GET` | `/api/v1/health` | 稼働確認とストア統計 |
-| `GET` | `/api/v1/entities?q=&type=&limit=&offset=` | ラベル全文検索 |
+| `GET` | `/api/v1/entities?q=&type=&kind=&limit=&offset=` | ラベル全文検索（`kind=instance` / `term` で ABox と TBox を分ける） |
 | `POST` | `/api/v1/entities` | インスタンス作成（IRI は ULID で自動採番） |
 | `GET` | `/api/v1/entities/{iri}?depth=` | CBD を JSON-LD で返す |
 | `PATCH` | `/api/v1/entities/{iri}` | 差分更新。IRI は動かない |

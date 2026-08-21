@@ -24,7 +24,7 @@ from ontoforge.changelog.snapshot import SnapshotPolicy, SnapshotStore
 from ontoforge.config import Settings
 from ontoforge.jsonld import Context, build_context, label_of
 from ontoforge.namespaces import RDF_TYPE, RDFS_COMMENT
-from ontoforge.search.fts import SearchIndex, SearchRecord
+from ontoforge.search.fts import Kind, SearchIndex, SearchRecord
 from ontoforge.store import graphs
 from ontoforge.store.iri import IriMinter
 from ontoforge.store.store import GraphStore
@@ -181,13 +181,17 @@ class Runtime:
 
     def search_record(self, subject: NamedNode) -> SearchRecord | None:
         """What the index should hold for ``subject``, or ``None`` if it is gone."""
-        quads = [
-            quad
+        by_graph = {
+            graph: list(self.store.quads_for_pattern(subject, None, None, graph))
             for graph in INDEXED_GRAPHS
-            for quad in self.store.quads_for_pattern(subject, None, None, graph)
-        ]
+        }
+        quads = [quad for group in by_graph.values() for quad in group]
         if not quads:
             return None
+        # A subject described in the ontology graph is a class or a property;
+        # everything else is an instance. The canvas asks for one, the
+        # vocabulary tree for the other.
+        kind: Kind = "term" if by_graph[graphs.ONTOLOGY] else "instance"
         comments = [
             quad.object.value
             for quad in quads
@@ -203,6 +207,7 @@ class Runtime:
             label=label_of(quads) or "",
             comment=" ".join(comments),
             types=types,
+            kind=kind,
         )
 
 

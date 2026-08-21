@@ -23,6 +23,7 @@ from ontoforge.jsonld import (
 from ontoforge.literals import make_literal, term_from_json
 from ontoforge.namespaces import RDF_TYPE, RDFS_COMMENT, RDFS_LABEL
 from ontoforge.runtime import Runtime
+from ontoforge.search.fts import Kind
 from ontoforge.store import graphs
 
 #: Labels are stored with a language tag; Japanese is the default (§15.2 Q10).
@@ -103,13 +104,19 @@ class EntityService:
         *,
         query: str = "",
         type_iri: str | None = None,
+        kind: Kind | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """Label search, backed by the FTS index (FR-08)."""
+        """Label search, backed by the FTS index (FR-08).
+
+        ``kind`` separates instances from ontology terms, which is what lets the
+        canvas draw the facts without the vocabulary getting mixed in.
+        """
         hits = self.runtime.search.search(
             query,
             type_iri=self._expand(type_iri) if type_iri else None,
+            kind=kind,
             limit=limit,
             offset=offset,
         )
