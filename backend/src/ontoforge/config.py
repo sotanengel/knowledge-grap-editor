@@ -34,6 +34,15 @@ class Settings(BaseModel):
     reasoner: ReasonerProfile = "rdfs"
     reasoner_max_iter: int = Field(default=20, ge=1)
     query_timeout_ms: int = Field(default=10_000, ge=1)
+    #: Which graph space to open. Several can live side by side (FR-14).
+    project: str = "default"
+    #: Local vector search. Off by default: it is a surface-similarity signal,
+    #: not a trained embedding, so it should be a deliberate choice (§14 Ph.3).
+    semantic_search: bool = False
+    #: Commit each snapshot to a git repository in `snapshots/` (§12.4).
+    git_snapshots: bool = False
+    #: Where to push those commits. Empty means "commit locally only".
+    git_remote: str | None = None
 
     @field_validator("base_iri")
     @classmethod
@@ -43,26 +52,47 @@ class Settings(BaseModel):
             raise ValueError("base_iri must not be empty")
         return value if value.endswith(("/", "#")) else f"{value}/"
 
-    @field_validator("auth_token")
+    @field_validator("auth_token", "git_remote")
     @classmethod
-    def _blank_token_means_no_auth(cls, value: str | None) -> str | None:
+    def _blank_means_unset(cls, value: str | None) -> str | None:
         return value or None
+
+    @field_validator("semantic_search", "git_snapshots", mode="before")
+    @classmethod
+    def _read_boolean_env(cls, value: object) -> object:
+        """``ONTOFORGE_SEMANTIC_SEARCH=1`` and ``=true`` should both mean yes."""
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return value
+
+    @property
+    def projects_dir(self) -> Path:
+        return self.data_dir / "projects"
+
+    @property
+    def project_dir(self) -> Path:
+        """Everything the open project owns lives under here (FR-14)."""
+        return self.projects_dir / self.project
 
     @property
     def store_dir(self) -> Path:
-        return self.data_dir / "store"
+        return self.project_dir / "store"
 
     @property
     def snapshots_dir(self) -> Path:
-        return self.data_dir / "snapshots"
+        return self.project_dir / "snapshots"
 
     @property
     def changelog_dir(self) -> Path:
-        return self.data_dir / "changelog"
+        return self.project_dir / "changelog"
 
     @property
     def index_dir(self) -> Path:
-        return self.data_dir / "index"
+        return self.project_dir / "index"
+
+    def for_project(self, project: str) -> Settings:
+        """The same settings pointed at a different graph space."""
+        return self.model_copy(update={"project": project})
 
     @property
     def config_file(self) -> Path:
@@ -76,6 +106,8 @@ class Settings(BaseModel):
         """Create the ``/data`` layout described in §5.1 if it is not there yet."""
         for directory in (
             self.data_dir,
+            self.projects_dir,
+            self.project_dir,
             self.store_dir,
             self.snapshots_dir,
             self.changelog_dir,

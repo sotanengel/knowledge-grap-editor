@@ -22,9 +22,12 @@ from ontoforge.changelog.log import ACTOR_USER, ChangeLog
 from ontoforge.changelog.patch import Patch
 from ontoforge.changelog.snapshot import SnapshotPolicy, SnapshotStore
 from ontoforge.config import Settings
+from ontoforge.gitsync.repo import GitError, SnapshotRepository, commit_message
 from ontoforge.jsonld import Context, build_context, label_of
 from ontoforge.namespaces import RDF_TYPE, RDFS_COMMENT
+from ontoforge.projects.store import ProjectStore
 from ontoforge.search.fts import Kind, SearchIndex, SearchRecord
+from ontoforge.semantic.vectors import VectorIndex
 from ontoforge.store import graphs
 from ontoforge.store.iri import IriMinter
 from ontoforge.store.store import GraphStore
@@ -74,13 +77,21 @@ class Runtime:
     minter: IriMinter
     policy: SnapshotPolicy
     events: EventBus = field(default_factory=EventBus)
+    #: Only present when semantic search is switched on (§14 Phase 3).
+    vectors: VectorIndex | None = None
+    #: Only present when snapshots are versioned (§12.4).
+    git: SnapshotRepository | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
     @classmethod
     def create(cls, settings: Settings) -> Self:
+        # A project must exist before its directories can be opened; this also
+        # adopts a pre-projects `/data` layout on first start (FR-14).
+        ProjectStore(settings.data_dir).ensure_default()
         settings.ensure_directories()
-        return cls(
+
+        runtime = cls(
             settings=settings,
             store=GraphStore.open(settings.store_dir),
             changelog=ChangeLog(settings.changelog_dir),
@@ -88,9 +99,18 @@ class Runtime:
             search=SearchIndex(settings.index_dir),
             minter=IriMinter(settings.base_iri),
             policy=SnapshotPolicy(every_ops=DEFAULT_SNAPSHOT_EVERY_OPS),
+            vectors=VectorIndex(settings.index_dir) if settings.semantic_search else None,
+            git=(SnapshotRepository(settings.snapshots_dir) if settings.git_snapshots else None),
         )
+        # The full-text index is a derived cache: a schema bump empties it, and
+        # the store is the authority, so refill it rather than serve nothing.
+        if runtime.search.stale and runtime.store.count() > 0:
+            runtime.reindex_all()
+        return runtime
 
     def close(self) -> None:
+        if self.vectors is not None:
+            self.vectors.close()
         self.search.close()
         self.store.close()
 
@@ -147,6 +167,7 @@ class Runtime:
         self.reindex_subjects(_touched_subjects(patch))
         if self.policy.should_snapshot(seq=patch.seq, now=time.monotonic()):
             self.snapshots.write(self.store, seq=patch.seq)
+            self._commit_snapshot(patch)
         self.events.publish(
             {
                 "type": kind,
@@ -157,6 +178,15 @@ class Runtime:
             }
         )
 
+    def _commit_snapshot(self, patch: Patch) -> None:
+        """Version the snapshot, if that was asked for. Never fatal (§12.4)."""
+        if self.git is None:
+            return
+        # A repository that cannot be written is a problem for the operator, not
+        # a reason to fail the edit that triggered the snapshot.
+        with contextlib.suppress(GitError):
+            self.git.commit(commit_message(patch.seq, actor=patch.actor))
+
     # ------------------------------------------------------------------ index
 
     def reindex_subjects(self, subjects: Iterable[NamedNode]) -> None:
@@ -165,8 +195,12 @@ class Runtime:
             record = self.search_record(subject)
             if record is None:
                 self.search.delete(subject.value)
-            else:
-                self.search.upsert(record)
+                if self.vectors is not None:
+                    self.vectors.delete(subject.value)
+                continue
+            self.search.upsert(record)
+            if self.vectors is not None and record.label:
+                self.vectors.upsert(record.iri, record.label)
 
     def reindex_all(self) -> int:
         """Rebuild the whole index, e.g. after an import or a restore."""
@@ -177,6 +211,10 @@ class Runtime:
             if isinstance(quad.subject, NamedNode)
         }
         records = [record for subject in subjects if (record := self.search_record(subject))]
+        if self.vectors is not None:
+            self.vectors.replace_all(
+                [(record.iri, record.label) for record in records if record.label]
+            )
         return self.search.replace_all(records)
 
     def search_record(self, subject: NamedNode) -> SearchRecord | None:

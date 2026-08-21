@@ -13,6 +13,7 @@ from ontoforge.api.deps import MappingDep, TransferDep
 from ontoforge.api.schemas import ImportSummary, MappingNames
 from ontoforge.io.csvmap import CsvMapping
 from ontoforge.io.formats import ExportFormat, ImportFormat, file_extension, media_type
+from ontoforge.io.lpg import LpgParseError
 from ontoforge.io.service import UnsupportedFormatError
 from ontoforge.store import graphs
 
@@ -37,16 +38,22 @@ async def import_file(
     try:
         if definition is not None:
             result = transfer.import_csv(payload, mapping=definition, filename=filename)
+        elif _is_property_graph(filename):
+            # GraphML and the node/edge CSV archive are the return leg of an
+            # export, not RDF; they go through the property-graph reader.
+            result = transfer.import_lpg(payload, filename=filename)
         else:
             result = transfer.import_rdf(payload, filename=filename)
-    except UnsupportedFormatError as error:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
-    except ValueError as error:
+    except (UnsupportedFormatError, LpgParseError, ValueError) as error:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
 
     return ImportSummary(
         quads=result.quads, rows=result.rows, iris=result.iris, format=result.format
     )
+
+
+def _is_property_graph(filename: str) -> bool:
+    return filename.lower().endswith((".graphml", ".zip"))
 
 
 def _resolve_mapping(

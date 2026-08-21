@@ -86,6 +86,25 @@ class LoadVocabularies(_Body):
     names: list[str] = Field(default_factory=list)
 
 
+class CreateProject(_Body):
+    """``POST /projects``: a new graph space (FR-14)."""
+
+    name: str
+    id: str | None = None
+
+
+class RenameProject(_Body):
+    """``PATCH /projects/{id}``: the display name only; the id never moves."""
+
+    name: str
+
+
+class SetGitRemote(_Body):
+    """``PUT /git/remote``: where snapshot commits are pushed (§12.4)."""
+
+    url: str
+
+
 class DeleteResult(BaseModel):
     removed: int
 

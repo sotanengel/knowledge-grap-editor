@@ -24,6 +24,7 @@ from ontoforge.io.formats import (
     rdf_format,
 )
 from ontoforge.io.graphview import build_view
+from ontoforge.io.lpg import read_csv_tables, read_graphml, to_quads
 from ontoforge.literals import XSD_STRING, make_literal
 from ontoforge.namespaces import PREFIXES, RDF_TYPE, RDFS_LABEL
 from ontoforge.rdfstar import EdgeMetadata, edge_metadata_quads
@@ -100,6 +101,40 @@ class ImportExportService:
 
         self.runtime.write(additions=quads, actor=import_actor(filename))
         return ImportResult(quads=len(quads), format=resolved.value)
+
+    def import_lpg(
+        self,
+        payload: str | bytes,
+        *,
+        filename: str,
+        max_bytes: int = DEFAULT_MAX_IMPORT_BYTES,
+    ) -> ImportResult:
+        """Read a GraphML file or a node/edge CSV archive back in (§14 Phase 3)."""
+        raw = payload.encode("utf-8") if isinstance(payload, str) else payload
+        if len(raw) > max_bytes:
+            raise ValueError(f"the file is too large: {len(raw)} bytes exceeds {max_bytes}")
+
+        lower = filename.lower()
+        if lower.endswith(".graphml"):
+            graph = read_graphml(raw)
+        elif lower.endswith(".zip"):
+            graph = read_csv_tables(raw)
+        else:
+            raise UnsupportedFormatError(
+                f"{filename!r} is neither a GraphML file nor a node/edge CSV archive"
+            )
+
+        quads = to_quads(
+            graph,
+            attribute_namespace=f"{self.runtime.settings.base_iri}ont#",
+        )
+        self.runtime.write(additions=quads, actor=import_actor(filename))
+        return ImportResult(
+            quads=len(quads),
+            rows=len(graph.nodes),
+            iris=[node.iri for node in graph.nodes],
+            format="lpg",
+        )
 
     def import_csv(
         self,

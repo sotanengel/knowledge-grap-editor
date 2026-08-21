@@ -23,6 +23,9 @@ class ImportFormat(StrEnum):
     RDFXML = "rdfxml"
     JSONLD = "jsonld"
     CSV = "csv"
+    #: The return leg of a property-graph export (§14 Phase 3).
+    GRAPHML = "graphml"
+    LPG_CSV = "lpg-csv"
 
 
 class ExportFormat(StrEnum):
@@ -67,6 +70,8 @@ _EXTENSIONS: dict[str, str] = {
     ".json": "jsonld",
     ".csv": "csv",
     ".tsv": "csv",
+    ".graphml": "graphml",
+    ".zip": "lpg-csv",
 }
 
 MEDIA_TYPES: dict[str, str] = {

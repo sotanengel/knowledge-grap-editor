@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import { useGraph } from '../../state/graph';
 import { useSettings } from '../../state/settings';
 import { ErrorNote } from './ErrorNote';
+import { ProjectSwitcher } from './ProjectSwitcher';
 
 const EXPORT_FORMATS = [
   { value: 'turtle', label: 'Turtle (.ttl)' },
@@ -39,6 +40,8 @@ export function Header({ onOpenPanel }: { onOpenPanel: (tab: string) => void }) 
   return (
     <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
       <h1 className="text-base font-semibold">OntoForge</h1>
+
+      <ProjectSwitcher />
 
       <label className="flex-1 min-w-[200px] max-w-md">
         <span className="sr-only">検索</span>

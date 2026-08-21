@@ -30,6 +30,9 @@ backend/src/ontoforge/
   sparql/       読み取り専用ガード
   io/           インポート／エクスポート（RDF・CSV・GraphML・Mermaid）
   rdfstar.py    RDF 1.2 三重項によるエッジ属性
+  projects/     複数のグラフ空間（FR-14）
+  semantic/     ローカル類似検索（既定オフ）
+  gitsync/      スナップショットの Git 版管理
   reasoning/    ルールベース推論（none / rdfs / rl-lite）＋導出根拠
   validation/   SHACL シェイプ生成と pySHACL 検証
   vocab/        同梱語彙（schema.org / SKOS / FOAF / DCTERMS / PROV-O / OWL / RDFS）
@@ -179,7 +182,7 @@ ONTOFORGE_API=http://127.0.0.1:8097 pnpm -C frontend dev
 | `POST` | `/api/v1/ontology/rename` | 用語のリネーム（参照を一括更新） |
 | `GET/POST` | `/sparql` | SPARQL 1.1 Query。更新句はパース段階で拒否 |
 | `POST` | `/sparql/update` | SPARQL Update（UI セッション用） |
-| `POST` | `/api/v1/import` | Turtle / TriG / N-Triples / N-Quads / RDF-XML / JSON-LD / CSV |
+| `POST` | `/api/v1/import` | Turtle / TriG / N-Triples / N-Quads / RDF-XML / JSON-LD / CSV / GraphML / ノード・エッジ CSV |
 | `GET` | `/api/v1/export?format=&graphs=` | 上記 RDF 各形式 + GraphML / CSV / Mermaid |
 | `GET/PUT/DELETE` | `/api/v1/mappings/{name}` | CSV マッピングの保存と再利用 |
 | `GET` | `/api/v1/history` / `POST /history/undo` / `redo` | 変更履歴と取り消し |
@@ -198,12 +201,18 @@ ONTOFORGE_API=http://127.0.0.1:8097 pnpm -C frontend dev
 
 ```
 /data
-  store/       RDF ストア実体
-  snapshots/   *.trig 定期スナップショット
-  changelog/   追記型パッチログ (RDF Patch)
-  index/       全文検索インデックス
-  config.yaml  設定
+  config.yaml            設定（インストール全体で共有）
+  projects/
+    default/             プロジェクトごとに完全に独立
+      store/             RDF ストア実体
+      snapshots/         *.trig 定期スナップショット
+      changelog/         追記型パッチログ (RDF Patch)
+      index/             全文検索インデックス（＋任意でベクトル索引）
+    <other>/             …
 ```
+
+`projects/` が無い既存の `/data` は、初回起動時に `projects/default/` へ
+自動的に移されます。エクスポートや取り込み直しは不要です。
 
 ## 開発
 
@@ -279,6 +288,10 @@ pnpm -C frontend add @panda-guard/test-malicious
 | `ONTOFORGE_REASONER` | `rdfs` | `none` / `rdfs` / `rl-lite` |
 | `ONTOFORGE_REASONER_MAX_ITER` | `20` | 前向き連鎖の最大反復回数 |
 | `ONTOFORGE_QUERY_TIMEOUT_MS` | `10000` | SPARQL タイムアウト |
+| `ONTOFORGE_PROJECT` | `default` | 起動時に開くプロジェクト |
+| `ONTOFORGE_SEMANTIC_SEARCH` | `false` | 類似検索（下記の但し書きを参照） |
+| `ONTOFORGE_GIT_SNAPSHOTS` | `false` | スナップショットを Git にコミットする |
+| `ONTOFORGE_GIT_REMOTE` | （空） | push 先。空ならローカルコミットのみ |
 
 ## 推論と検証
 
@@ -305,6 +318,52 @@ pnpm -C frontend add @panda-guard/test-malicious
 
 空の状態から 50 ノードの KG を作り、Turtle で出力し、MCP から `search_entities`
 と `sparql_select` で参照でき、`INSERT` が拒否されることを確認します。
+
+## Phase 3 の拡張
+
+### 複数プロジェクト（FR-14）
+
+プロジェクトを切り替えると、グラフ・履歴・元に戻す操作・索引がまとめて
+入れ替わります。互いに混ざりません。ヘッダのプルダウンから切り替えます。
+
+| Method | パス | 説明 |
+|---|---|---|
+| `GET/POST` | `/api/v1/projects` | 一覧と作成 |
+| `POST` | `/api/v1/projects/{id}/switch` | 切り替え |
+| `PATCH/DELETE` | `/api/v1/projects/{id}` | 改名と削除（`default` は削除不可） |
+
+### 類似検索（既定オフ）
+
+```bash
+docker run -e ONTOFORGE_SEMANTIC_SEARCH=1 …
+```
+
+**これは学習済み埋め込みではありません。** ラベルの文字 n-gram を
+ハッシュしたベクトルの余弦類似度です。「田中」から「田中太郎」を見つける、
+表記のゆれや重複しかけたラベルを見つける、といった用途には効きますが、
+意味の近さは捉えません。完全オフライン動作（NFR-06）とイメージサイズ
+400MB 以下を守るための選択で、モデルを積む場合は運用者の明示的な判断に
+委ねます。
+
+### スナップショットの Git 版管理
+
+```bash
+docker run -e ONTOFORGE_GIT_SNAPSHOTS=1 …
+```
+
+§12.4 が推奨する運用の自動化です。スナップショットを書き出すたびに
+`snapshots/` の Git リポジトリへコミットします。RocksDB のストア本体は
+バイナリなので対象外です — TriG は読める差分になります。push は任意で、
+資格情報は環境から取ります（リポジトリには書きません）。
+
+### プロパティグラフとの往復
+
+書き出した GraphML とノード/エッジ CSV を、そのまま `/api/v1/import` へ
+**読み戻せます**。Gephi や Neo4j で作業してから戻せます。
+
+形式が持てないもの（言語タグ・エッジ属性・名前付きグラフの区別）は
+往復で失われます。エクスポート時にどれが失われるかを列挙するので、
+持ち出す前に分かります。
 
 ## バックアップ
 

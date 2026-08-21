@@ -24,11 +24,13 @@ from ontoforge.api.routes import (
     events,
     history,
     ontology,
+    projects,
     sparql,
     transfer,
 )
 from ontoforge.api.schemas import Health
 from ontoforge.config import Settings, load_settings
+from ontoforge.projects.registry import ProjectRegistry
 from ontoforge.runtime import Runtime
 
 API_PREFIX = "/api/v1"
@@ -94,8 +96,12 @@ def create_app(
     Pass ``runtime`` to reuse an already-open store (tests do this); otherwise
     one is opened for the lifetime of the process.
     """
-    owns_runtime = runtime is None
-    active = runtime if runtime is not None else Runtime.create(settings or load_settings())
+    resolved_settings = settings or (runtime.settings if runtime is not None else load_settings())
+    # When the app owns its runtime it owns a registry, so projects can be
+    # switched at run time (FR-14). A caller-supplied runtime (tests) is used
+    # as-is and stays on whichever project it was opened with.
+    registry = ProjectRegistry(resolved_settings) if registry_owned(runtime) else None
+    active: Runtime = registry.current if registry is not None else _required(runtime)
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -106,8 +112,8 @@ def create_app(
             try:
                 yield
             finally:
-                if owns_runtime:
-                    active.close()
+                if registry is not None:
+                    registry.close()
 
     app = FastAPI(
         title=TITLE,
@@ -116,6 +122,8 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.runtime = active
+    if registry is not None:
+        app.state.registry = registry
 
     guarded: list[Any] = [Depends(require_auth)]
 
@@ -125,6 +133,7 @@ def create_app(
     api.include_router(ontology.router)
     api.include_router(transfer.router)
     api.include_router(analysis.router)
+    api.include_router(projects.router)
     api.include_router(history.router)
     api.include_router(events.router)
     app.include_router(api)
@@ -139,6 +148,17 @@ def create_app(
         app.mount("/", StaticFiles(directory=resolved_static, html=True), name="ui")
 
     return app
+
+
+def registry_owned(runtime: Runtime | None) -> bool:
+    """Whether this app opens its own graph spaces, rather than reusing one."""
+    return runtime is None
+
+
+def _required(runtime: Runtime | None) -> Runtime:
+    if runtime is None:  # pragma: no cover - guarded by registry_owned
+        raise ValueError("a runtime is required when the app does not own a registry")
+    return runtime
 
 
 def _mount_mcp(app: FastAPI, runtime: Runtime) -> None:

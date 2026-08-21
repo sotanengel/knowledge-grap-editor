@@ -10,12 +10,29 @@ from ontoforge.entities import EntityService
 from ontoforge.io.csvmap import MappingStore
 from ontoforge.io.service import ImportExportService
 from ontoforge.ontology import OntologyService
+from ontoforge.projects.registry import ProjectRegistry
 from ontoforge.runtime import Runtime
 
 MAPPINGS_DIRNAME = "mappings"
 
 
+def registry_of(request: Request) -> ProjectRegistry:
+    registry = getattr(request.app.state, "registry", None)
+    if not isinstance(registry, ProjectRegistry):  # pragma: no cover - outside the lifespan
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "the runtime is not ready")
+    return registry
+
+
 def get_runtime(request: Request) -> Runtime:
+    """The runtime of whichever project is open (FR-14).
+
+    Resolved per request rather than captured once, so switching project takes
+    effect immediately and no handler can keep hold of the previous graph.
+    """
+    registry = getattr(request.app.state, "registry", None)
+    if isinstance(registry, ProjectRegistry):
+        return registry.current
+
     runtime = getattr(request.app.state, "runtime", None)
     if not isinstance(runtime, Runtime):  # pragma: no cover - only outside the lifespan
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "the runtime is not ready")

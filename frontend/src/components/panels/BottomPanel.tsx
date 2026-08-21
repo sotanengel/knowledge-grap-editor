@@ -4,17 +4,19 @@ import { useState } from 'react';
 import { useGraph } from '../../state/graph';
 import { CsvImportDialog } from './CsvImportDialog';
 import { HistoryPanel } from './HistoryPanel';
+import { SemanticPanel } from './SemanticPanel';
 import { SparqlConsole } from './SparqlConsole';
 import { TurtleView } from './TurtleView';
 import { ValidationPanel } from './ValidationPanel';
 
-export type PanelTab = 'sparql' | 'turtle' | 'validation' | 'history';
+export type PanelTab = 'sparql' | 'turtle' | 'validation' | 'history' | 'semantic';
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: 'sparql', label: 'SPARQL' },
   { id: 'turtle', label: 'Turtle ビュー' },
   { id: 'validation', label: '検証結果' },
   { id: 'history', label: '履歴' },
+  { id: 'semantic', label: '類似検索' },
 ];
 
 interface Props {
@@ -85,6 +87,7 @@ export function BottomPanel({ tab, onTabChange, collapsed, onToggle }: Props) {
           {tab === 'turtle' && <TurtleView />}
           {tab === 'validation' && <ValidationPanel />}
           {tab === 'history' && <HistoryPanel />}
+          {tab === 'semantic' && <SemanticPanel />}
         </div>
       )}
 
