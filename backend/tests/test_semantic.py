@@ -140,3 +140,45 @@ def test_with_the_model_a_search_finds_what_shares_no_character(tmp_path: Path) 
         top = index.search("企業", limit=3)
         assert top[0].iri == "iri:acme", top
         assert top[0].score > 0
+
+
+def test_the_runtime_refills_the_index_when_the_embedder_changes(tmp_path: Path) -> None:
+    """Swapping the embedder must not leave the index empty or stale.
+
+    The vectors of two embedders are not comparable, so the index is emptied --
+    and the store, which is the authority, refills it on the next start. Without
+    that, search would silently return nothing after an upgrade.
+    """
+    from pyoxigraph import Literal, NamedNode, Quad
+
+    from ontoforge.config import Settings
+    from ontoforge.namespaces import RDFS_LABEL
+    from ontoforge.runtime import Runtime
+    from ontoforge.semantic.embedder import HashingEmbedder
+    from ontoforge.semantic.vectors import VectorIndex
+    from ontoforge.store import graphs
+
+    settings = Settings(data_dir=tmp_path / "data", semantic_search=True)
+    with Runtime.create(settings) as runtime:
+        runtime.write(
+            additions=[
+                Quad(
+                    NamedNode("https://example.org/kg/id/a"),
+                    RDFS_LABEL,
+                    Literal("株式会社アクメ", language="ja"),
+                    graphs.DATA,
+                )
+            ]
+        )
+        assert runtime.vectors is not None
+        assert runtime.vectors.count() == 1
+
+    # A different embedder empties the index...
+    with VectorIndex(settings.index_dir, embedder=HashingEmbedder(dimensions=64)) as swapped:
+        assert swapped.count() == 0
+
+    # ...and the next start fills it again from the store.
+    with Runtime.create(settings) as reopened:
+        assert reopened.vectors is not None
+        assert reopened.vectors.count() == 1
+        assert reopened.search.count() == 1
