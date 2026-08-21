@@ -21,11 +21,54 @@
 ```
 backend/src/ontoforge/
   config.py     設定（ONTOFORGE_* 環境変数 / config.yaml）
+  cli.py        `ontoforge serve` / `ontoforge info`
   store/        pyoxigraph ラッパ・名前付きグラフ・IRI 採番・read-only ハンドル
   changelog/    RDF Patch 追記ログ・スナップショット・復元
+  entities.py   インスタンス CRUD（TBox に従う事実）
+  ontology.py   クラス／プロパティ定義とリネーム
+  search/       SQLite FTS5 全文検索
+  sparql/       読み取り専用ガード
+  io/           インポート／エクスポート（RDF・CSV・GraphML・Mermaid）
+  rdfstar.py    RDF 1.2 三重項によるエッジ属性
+  api/          FastAPI（REST・SPARQL・SSE）
 frontend/       React 18 + TypeScript + Vite + Tailwind CSS
 docs/           設計書
 ```
+
+## 起動
+
+```bash
+uv run ontoforge serve
+```
+
+既定で `127.0.0.1:8080` にのみバインドします。LAN へ公開する場合は
+`--host` を明示し、あわせて `ONTOFORGE_AUTH_TOKEN` を設定してください。
+
+## API
+
+すべて `/api/v1` 配下。SPARQL のみプロトコル準拠のため `/sparql` に置きます。
+
+| Method | パス | 説明 |
+|---|---|---|
+| `GET` | `/api/v1/health` | 稼働確認とストア統計 |
+| `GET` | `/api/v1/entities?q=&type=&limit=&offset=` | ラベル全文検索 |
+| `POST` | `/api/v1/entities` | インスタンス作成（IRI は ULID で自動採番） |
+| `GET` | `/api/v1/entities/{iri}?depth=` | CBD を JSON-LD で返す |
+| `PATCH` | `/api/v1/entities/{iri}` | 差分更新。IRI は動かない |
+| `DELETE` | `/api/v1/entities/{iri}` | ノードと関連トリプルを削除 |
+| `GET` | `/api/v1/ontology` | クラス階層とプロパティ一覧 |
+| `POST` | `/api/v1/ontology/classes` / `/properties` | 語彙定義の追加 |
+| `GET` | `/api/v1/ontology/properties?domain=` | 定義域に合う候補プロパティ |
+| `POST` | `/api/v1/ontology/rename` | 用語のリネーム（参照を一括更新） |
+| `GET/POST` | `/sparql` | SPARQL 1.1 Query。更新句はパース段階で拒否 |
+| `POST` | `/sparql/update` | SPARQL Update（UI セッション用） |
+| `POST` | `/api/v1/import` | Turtle / TriG / N-Triples / N-Quads / RDF-XML / JSON-LD / CSV |
+| `GET` | `/api/v1/export?format=&graphs=` | 上記 RDF 各形式 + GraphML / CSV / Mermaid |
+| `GET/PUT/DELETE` | `/api/v1/mappings/{name}` | CSV マッピングの保存と再利用 |
+| `GET` | `/api/v1/history` / `POST /history/undo` / `redo` | 変更履歴と取り消し |
+| `GET` | `/api/v1/events` | SSE。変更を他クライアントへプッシュ |
+
+対話的なドキュメントは起動後 `http://127.0.0.1:8080/docs` にあります。
 
 データはすべて `ONTOFORGE_DATA_DIR`（既定 `/data`）配下に置かれます。
 

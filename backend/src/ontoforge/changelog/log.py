@@ -119,6 +119,28 @@ class ChangeLog:
             return None
         return self._commit(store, patch)
 
+    def record(
+        self,
+        *,
+        additions: Iterable[Quad] = (),
+        deletions: Iterable[Quad] = (),
+        actor: str = ACTOR_USER,
+    ) -> Patch | None:
+        """Record a change that has *already* reached the store.
+
+        SPARQL Update writes straight through pyoxigraph, so the caller works
+        out what changed by diffing and hands the result here.
+        """
+        patch = Patch.create(
+            seq=self._last_seq + 1,
+            actor=actor,
+            additions=additions,
+            deletions=deletions,
+        )
+        if patch.is_empty:
+            return None
+        return self._commit(None, patch)
+
     def undo(self, store: GraphStore) -> Patch | None:
         """Undo the most recent change by appending its inverse."""
         if not self._undo_stack:
@@ -131,8 +153,9 @@ class ChangeLog:
             return None
         return self._commit(store, self._redo_stack[-1].invert(seq=self._last_seq + 1))
 
-    def _commit(self, store: GraphStore, patch: Patch) -> Patch:
-        apply_patch(store, patch)
+    def _commit(self, store: GraphStore | None, patch: Patch) -> Patch:
+        if store is not None:
+            apply_patch(store, patch)
         self.directory.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(serialize_patch(patch))
